@@ -1,19 +1,32 @@
-import 'dart:async'; // برای تایمر لودینگ زنده اتصالات
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io'; // برای کلاس بومی پلتفرم و فایل‌ها
+import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart'; // برای رفع خطای وضعیت ریلیز
-import 'package:window_manager/window_manager.dart'; // مدیریت پنجره ویندوز (دسکتاپ)
-import 'package:tray_manager/tray_manager.dart'; // مدیریت سیستم تری کنار ساعت (دسکتاپ)
-import 'src/rust/api/simple.dart'; // توابع راست
+import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:tray_manager/tray_manager.dart';
+import 'package:path_provider/path_provider.dart';
+import 'src/rust/api/simple.dart';
 import 'src/rust/frb_generated.dart';
 
-// آدرس ورکر مرکزی گزارش‌گیر ترافیک شما بر روی کلودفلر
-const String MANAGER_WORKER_URL = "https://round-sea-8418.redcloudir.workers.dev";
+const String managerWorkerUrl = "https://round-sea-8418.redcloudir.workers.dev";
+const String appCurrentVersion = "3.5";
+const String telegramChannelUrl = "https://t.me/DevTaha_project";
+const String usdtBnbAddress = "0xDeda28Aa73Ec089A77B3fC616E0011a8fce12900";
+const String githubRepoReleasesUrl = "https://github.com/Devtahas/RedCloud-windows/releases/latest";
 
-// مدل ساختار داده‌ای اکانت برای بخش گیت‌هاب
+void openBrowserUrl(String url) {
+  if (Platform.isWindows) {
+    Process.run('cmd', ['/c', 'start', '', url]);
+  } else if (Platform.isLinux) {
+    Process.run('xdg-open', [url]);
+  } else if (Platform.isMacOS) {
+    Process.run('open', [url]);
+  }
+}
+
 class VlessAccount {
   final String worker;
   final String uuid;
@@ -32,16 +45,15 @@ class VlessAccount {
   });
 }
 
-// مدل پیشرفته ساختار داده‌ای دی‌ان‌اس
 class DnsProfile {
   final String name;
   final String primary;
   final String secondary;
   final String description;
-  final String dnsType; // 'udp' | 'doh' | 'dot'
+  final String dnsType;
   final String? dohUrl;
   final String? dotHost;
-  final bool isCustom; // برای تشخیص قابلیت حذف توسط کاربر
+  final bool isCustom;
 
   DnsProfile({
     required this.name,
@@ -51,13 +63,12 @@ class DnsProfile {
     required this.dnsType,
     this.dohUrl,
     this.dotHost,
-    this.isCustom = false, // مقدار پیش‌فرض کاستوم نبودن است
+    this.isCustom = false,
   });
 }
 
-// مدل پیشرفته تجزیه و تحلیل و سریالایز کردن لینک‌های ویتوری (VLESS و Trojan)
 class V2rayConfig {
-  String protocol; // vless or trojan
+  String protocol;
   String alias;
   String address;
   int port;
@@ -70,6 +81,10 @@ class V2rayConfig {
   String fingerprint;
   String alpn;
   bool allowInsecure;
+  String publicKey;
+  String shortId;
+  String spiderX;
+  String echConfig;
 
   V2rayConfig({
     required this.protocol,
@@ -85,13 +100,18 @@ class V2rayConfig {
     this.fingerprint = 'chrome',
     this.alpn = 'http/1.1',
     this.allowInsecure = false,
+    this.publicKey = '',
+    this.shortId = '',
+    this.spiderX = '',
+    this.echConfig = '',
   });
 
-  // تبدیل لینک خام ویتوری به فیلدهای ساختاریافته فلاتر
   static V2rayConfig parse(String rawUrl) {
     try {
       final uri = Uri.parse(rawUrl);
-      final protocol = uri.scheme;
+      var protocol = uri.scheme.toLowerCase();
+      if (protocol == 'hy2') protocol = 'hysteria2';
+      
       final alias = Uri.decodeComponent(uri.fragment);
       final address = uri.host;
       final port = uri.port;
@@ -101,17 +121,25 @@ class V2rayConfig {
       final transport = params['type'] ?? 'tcp';
       final host = params['host'] ?? '';
       final path = Uri.decodeComponent(params['path'] ?? '');
-      final security = params['security'] ?? 'none';
-      final sni = params['sni'] ?? '';
+      var security = params['security'] ?? 'none';
+      if (params.containsKey('pbk') || params.containsKey('public_key')) {
+        security = 'reality';
+      }
+
+      final sni = params['sni'] ?? params['peer'] ?? '';
       final fingerprint = params['fp'] ?? 'chrome';
       final alpn = Uri.decodeComponent(params['alpn'] ?? 'http/1.1');
-      final allowInsecure = (params['insecure'] == '1' || params['allowInsecure'] == '1');
+      final allowInsecure = (params['insecure'] == '1' || params['allowInsecure'] == '1' || params['insecure'] == 'true');
+      final publicKey = params['pbk'] ?? params['public_key'] ?? '';
+      final shortId = params['sid'] ?? params['short_id'] ?? '';
+      final spiderX = params['spx'] ?? params['spider_x'] ?? '';
+      final echConfig = params['ech'] ?? params['ech_config'] ?? '';
 
       return V2rayConfig(
         protocol: protocol,
-        alias: alias,
+        alias: alias.isNotEmpty ? alias : 'سرور $address:$port',
         address: address,
-        port: port,
+        port: port == 0 ? 443 : port,
         uuidOrPassword: uuidOrPassword,
         transport: transport,
         host: host,
@@ -121,9 +149,12 @@ class V2rayConfig {
         fingerprint: fingerprint,
         alpn: alpn,
         allowInsecure: allowInsecure,
+        publicKey: publicKey,
+        shortId: shortId,
+        spiderX: spiderX,
+        echConfig: echConfig,
       );
     } catch (_) {
-      // در صورت بروز هرگونه خطای پارس، بازگردانی ساختار پایه پیش‌فرض
       return V2rayConfig(
         protocol: 'vless',
         alias: 'سرور ویرایش‌نشده',
@@ -134,20 +165,31 @@ class V2rayConfig {
     }
   }
 
-  // تبدیل مجدد فیلدهای فلاتر به لینک استاندارد خام ویتوری جهت ارسال به هسته
   String toRawUrl() {
-    final Map<String, String> queryParams = {
-      'security': security,
-      'type': transport,
-    };
-    if (host.isNotEmpty) queryParams['host'] = host;
-    if (path.isNotEmpty) queryParams['path'] = path;
-    if (sni.isNotEmpty) queryParams['sni'] = sni;
-    if (fingerprint.isNotEmpty) queryParams['fp'] = fingerprint;
-    if (alpn.isNotEmpty) queryParams['alpn'] = alpn;
-    if (allowInsecure) {
-      queryParams['insecure'] = '1';
-      queryParams['allowInsecure'] = '1';
+    final Map<String, String> queryParams = {};
+    
+    if (protocol == 'hysteria2') {
+      if (sni.isNotEmpty) queryParams['sni'] = sni;
+      if (allowInsecure) queryParams['insecure'] = '1';
+      if (echConfig.isNotEmpty) queryParams['ech'] = echConfig;
+    } else {
+      queryParams['security'] = security;
+      queryParams['type'] = transport;
+      if (host.isNotEmpty) queryParams['host'] = host;
+      if (path.isNotEmpty) queryParams['path'] = path;
+      if (sni.isNotEmpty) queryParams['sni'] = sni;
+      if (fingerprint.isNotEmpty) queryParams['fp'] = fingerprint;
+      if (alpn.isNotEmpty) queryParams['alpn'] = alpn;
+      if (allowInsecure) {
+        queryParams['insecure'] = '1';
+        queryParams['allowInsecure'] = '1';
+      }
+      if (security == 'reality') {
+        if (publicKey.isNotEmpty) queryParams['pbk'] = publicKey;
+        if (shortId.isNotEmpty) queryParams['sid'] = shortId;
+        if (spiderX.isNotEmpty) queryParams['spx'] = spiderX;
+      }
+      if (echConfig.isNotEmpty) queryParams['ech'] = echConfig;
     }
 
     final encodedAlias = Uri.encodeComponent(alias);
@@ -161,15 +203,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
 
-  // ۱. راه‌اندازی بومی مدیریت پنجره در ویندوز
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
-      size: Size(1100, 750),
-      minimumSize: Size(950, 650),
+      size: Size(1180, 800),
+      minimumSize: Size(980, 680),
       center: true,
-      title: 'RedCloud VPN', // شخصی‌سازی عنوان پنجره برنامه
+      title: 'RedCloud VPN - Next-Gen Anti-Censorship Client',
       skipTaskbar: false,
     );
 
@@ -178,7 +219,6 @@ Future<void> main() async {
       await windowManager.focus();
     });
 
-    // جلوگیری از بسته‌شدن اجباری برنامه با زدن دکمه بستن (X)
     await windowManager.setPreventClose(true);
   }
 
@@ -207,18 +247,27 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class MainLayout extends StatefulWidget {
+class MainLayout extends StatelessWidget {
   const MainLayout({super.key});
 
   @override
-  State<MainLayout> createState() => _MainLayoutState();
+  Widget build(BuildContext context) {
+    return const MainLayoutContent();
+  }
 }
 
-// ادغام کردن شنونده‌های پنجره و سیستم تری
-class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListener {
-  int _selectedMenuIndex = 0; // مدیریت زبانه‌های سایدبار کناری
+class MainLayoutContent extends StatefulWidget {
+  const MainLayoutContent({super.key});
+
+  @override
+  State<MainLayoutContent> createState() => _MainLayoutContentState();
+}
+
+class _MainLayoutContentState extends State<MainLayoutContent> with WindowListener, TrayListener, TickerProviderStateMixin {
+  int _selectedMenuIndex = 0;
   
   final TextEditingController _binaryPathController = TextEditingController(text: 'sing-box.exe');
+  final TextEditingController _aetherPathController = TextEditingController(text: 'aether.exe');
   final TextEditingController _torPathController = TextEditingController(text: 'tor.exe');
   final TextEditingController _psiphonPathController = TextEditingController(text: 'psiphon-tunnel-core.exe');
   final TextEditingController _importController = TextEditingController();
@@ -227,54 +276,82 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
   final TextEditingController _pathController = TextEditingController();
   final TextEditingController _workerController = TextEditingController();
 
-  // کنترلرها و متغیرهای وضعیت جدید برای تنظیمات ضد سانسور (Anti-DPI)
   final TextEditingController _customSniController = TextEditingController();
-  final TextEditingController _tlsSpoofController = TextEditingController();
+  final TextEditingController _tlsSpoofController = TextEditingController(text: 'zoom.us');
+  final TextEditingController _fallbackDelayController = TextEditingController(text: '500ms');
+
+  // پارامترهای جدید Aether
+  final TextEditingController _aetherWarpKeyController = TextEditingController();
+  final TextEditingController _aetherTeamController = TextEditingController();
+  String _selectedAetherNoize = 'firewall';
+  
+  String _selectedUtlsFingerprint = 'chrome';
   bool _enableFragment = false;
   bool _enableRecordFragment = false;
-  bool _useTunMode = false; // سوئیچ جدید فعال‌سازی کارت شبکه مجازی (TUN)
+  bool _enableTlsSpoof = false;
+  bool _useTunMode = false;
 
-  // متغیرهای وضعیت مانیتور زنده سرعت ترافیک واقعی
+  bool _isHybridModeEnabled = true;
+
   String _downloadSpeed = "0.0 B/s";
   String _uploadSpeed = "0.0 B/s";
-  StreamSubscription? _trafficSubscription; // شنونده استریم سرعت Clash API
+  StreamSubscription? _trafficSubscription;
 
-  // نگهدارنده پینگ‌های زنده سرورها
   final Map<String, int> _nodePings = {};
   bool _isBulkPinging = false;
 
   List<ProxyNode> _savedNodes = [];
   ProxyNode? _selectedNode;
 
-  // اطلاعات موقعیت مکانی و آی‌پی سرور متصل شده
   String? _publicIp;
   String? _countryCode;
   String? _countryName;
   String? _cityName;
   bool _isLoadingIpInfo = false;
 
-  // لیست اکانت‌های دریافت شده از گیت‌هاب
   List<VlessAccount> _githubAccounts = [];
   VlessAccount? _selectedGithubAccount;
   bool _isLoadingAccounts = false;
 
-  // متغیرهای جمع‌آوری ترافیک زنده این نشست کاربر جهت ارسال تله‌متری به سرور
   double _sessionBytesUsed = 0; 
   Timer? _telemetryTimer;
 
-  // وضعیت‌های مستقل اتصالات برنامه
-  bool _isProxyRunning = false;     // وضعیت سرورهای V2Ray
-  bool _isTorRunning = false;       // وضعیت اتصال نهایی شبکه تور (به مدار پیاز متصل شده)
-  bool _isTorConnecting = false;    // فرآیند میانی در حال اتصال تور (Bootstrap < 100)
-  int _torProgressPercent = 0;      // نگهدارنده درصد زنده پیشرفت تور
-  Timer? _torProgressTimer;         // تایمر پایش درصد لود تور
+  bool _isProxyRunning = false;
+  bool _isHybridRunning = false;
   
-  bool _isPsiphonRunning = false;   // وضعیت نهایی اتصال شبکه سایفون (پورت ۹۰۸۰ متصل شده)
-  bool _isPsiphonConnecting = false; // فرآیند میانی در حال اتصال سایفون
-  Timer? _psiphonProgressTimer;     // تایمر پایش زنده لود سایفون
+  bool _isAetherRunning = false;
+  bool _isAetherConnecting = false;
+  int _aetherProgressPercent = 0;
+  String _aetherStatusText = "آماده اتصال";
+  Timer? _aetherProgressTimer;
   
-  String _selectedTorCountry = "تصادفی (Random)"; // کشور پیش‌فرض تور
-  String _selectedPsiphonCountry = "تصادفی (Random)"; // کشور پیش‌فرض سایفون
+  String _selectedAetherMode = "auto";
+
+  final Map<String, String> _aetherModes = {
+    'auto': 'انتخاب خودکار هوشمند (Auto Failover - پیشنهادی)',
+    'masque_h3': 'MASQUE H3 (QUIC) - پرسرعت',
+    'masque_h2': 'MASQUE H2 + Fragment - ضد اختلال UDP',
+    'gool': 'Gool (WARP-in-WARP) - تونل مضاعف ضد قطع',
+    'wireguard': 'WireGuard - پروتکل استاندارد وایرگارد',
+  };
+
+  final Map<String, String> _aetherNoizeProfiles = {
+    'firewall': 'فایروال (Firewall - ضد فیلترینگ و مسدودسازی پیشرفته)',
+    'light': 'سبک (Light - حداکثر سرعت و پینگ پایین)',
+    'aggressive': 'تهاجمی (Aggressive - عبور از اختلالات شدید شبکه)',
+  };
+
+  bool _isTorRunning = false;
+  bool _isTorConnecting = false;
+  int _torProgressPercent = 0;
+  Timer? _torProgressTimer;
+  
+  bool _isPsiphonRunning = false;
+  bool _isPsiphonConnecting = false;
+  Timer? _psiphonProgressTimer;
+  
+  String _selectedTorCountry = "تصادفی (Random)";
+  String _selectedPsiphonCountry = "تصادفی (Random)";
   
   final Map<String, String> _torCountries = {
     'تصادفی (Random)': '',
@@ -297,13 +374,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     'هلند (Netherlands)': 'NL',
   };
 
-  // لیست دی‌ان‌اس‌های برگزیده تحریم‌شکن و جهانی امن پیش‌فرض (بزرگ و جامع)
-  List<DnsProfile> _dnsList = [
+  final List<DnsProfile> _dnsList = [
     DnsProfile(
       name: 'کلودفلر DoH (فوق امن)', 
       primary: '1.1.1.1', 
       secondary: '1.0.0.1', 
-      description: 'امن‌ترین پروتکل دی‌ان‌اس رمزنگاری شده جهان بر بستر HTTPS برای مهار نشت هویت',
+      description: 'امن‌ترین پروتکل دی‌ان‌اس رمزنگاری شده جهان بر بستر HTTPS',
       dnsType: 'doh',
       dohUrl: 'https://cloudflare-dns.com/dns-query',
     ),
@@ -311,7 +387,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       name: 'گوگل DoT (سرعت بالا)', 
       primary: '8.8.8.8', 
       secondary: '8.8.4.4', 
-      description: 'ترافیک دی‌ان‌اس رمزنگاری شده گوگل بر بستر پورت بومی TLS 853 برای مهار شنود',
+      description: 'ترافیک دی‌ان‌اس رمزنگاری شده گوگل بر بستر پورت بومی TLS 853',
       dnsType: 'dot',
       dotHost: 'dns.google',
     ),
@@ -319,35 +395,35 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       name: 'شکن (Shecan)', 
       primary: '178.22.122.100', 
       secondary: '185.51.200.2', 
-      description: 'دور زدن تحریم‌های اینترنتی وب‌سایت‌های خارجی به صورت UDP معمولی',
+      description: 'دور زدن تحریم‌های اینترنتی وب‌سایت‌های خارجی',
       dnsType: 'udp',
     ),
     DnsProfile(
       name: 'الکترو (Electro)', 
       primary: '78.157.42.100', 
       secondary: '78.157.42.101', 
-      description: 'مخصوص بازی و تحریم‌شکن عمومی با پینگ عالی به صورت UDP معمولی',
+      description: 'مخصوص بازی و تحریم‌شکن عمومی با پینگ مناسب',
       dnsType: 'udp',
     ),
     DnsProfile(
       name: 'رادار گیم (Radar Game)', 
       primary: '10.201.10.10', 
       secondary: '10.201.10.11', 
-      description: 'دی‌ان‌اس ایرانی مخصوص کاهش پینگ و دور زدن تحریم بازی‌های آنلاین',
+      description: 'دی‌ان‌اس ایرانی مخصوص بازی‌های آنلاین',
       dnsType: 'udp',
     ),
     DnsProfile(
       name: '۴۰۳ آنلاین (403.online)', 
       primary: '10.202.10.10', 
       secondary: '10.202.10.11', 
-      description: 'دی‌ان‌اس تحریم‌شکن ایرانی بسیار پرسرعت برای برنامه‌نویسان و گیمرها',
+      description: 'دی‌ان‌اس تحریم‌شکن ایرانی بسیار پرسرعت',
       dnsType: 'udp',
     ),
     DnsProfile(
       name: 'ادگارد DoH (حذف تبلیغات)', 
       primary: '94.140.14.14', 
       secondary: '94.140.15.15', 
-      description: 'فیلتر کردن خودکار دامنه‌های تبلیغاتی، ردیاب‌ها و وب‌سایت‌های مخرب از طریق DoH',
+      description: 'فیلتر کردن خودکار دامنه‌های تبلیغاتی و ردیاب‌ها با DoH',
       dnsType: 'doh',
       dohUrl: 'https://dns.adguard-dns.com/dns-query',
     ),
@@ -363,28 +439,42 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       name: 'کواد ناین DoH (Quad9)', 
       primary: '9.9.9.9', 
       secondary: '149.112.112.112', 
-      description: 'مسدودسازی خودکار وب‌سایت‌های بدافزاری و جاسوسی با DoH ساخت سوئیس',
+      description: 'مسدودسازی خودکار وب‌سایت‌های بدافزاری ساخت سوئیس',
       dnsType: 'doh',
       dohUrl: 'https://dns.quad9.net/dns-query',
     ),
   ];
 
-  late DnsProfile _selectedDns; // دی‌ان‌اس انتخاب شده فعلی
-  bool _isDnsRunning = false;   // وضعیت اعمال بودن دی‌ان‌اس
-  int? _dnsPing;                // پینگ سرور دی‌ان‌اس بر اساس میلی‌ثانیه
-  bool _isPingingDns = false;   // وضعیت در حال سنجش پینگ دی‌ان‌اس
+  late DnsProfile _selectedDns;
+  bool _isDnsRunning = false;
+  int? _dnsPing;
+  bool _isPingingDns = false;
 
   bool _useSystemProxy = true; 
   bool _isScanning = false; 
   String _statusMessage = "سیستم آماده اتصال است";
 
-  // ایجاد کانال متد ارتباطی بومی بستر اندروید
+  // متغیرهای سیستم آپدیت و انیمیشن تپش نئونی
+  bool _hasUpdate = false;
+  String _latestVersion = "";
+  String _latestReleaseUrl = githubRepoReleasesUrl;
+  bool _isCheckingUpdate = false;
+  AnimationController? _pulseController;
+  Animation<double>? _pulseAnimation;
+
   static const _androidVpnChannel = MethodChannel('com.example.redcloud/vpn');
 
-  // تابع ذخیره کل سرورها روی هارددیسک به صورت فایل متنی JSON
+  Future<File> _getLocalFile(String fileName) async {
+    final directory = await getApplicationSupportDirectory();
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return File('${directory.path}/$fileName');
+  }
+
   Future<void> _saveNodesToDisk() async {
     try {
-      final file = File('saved_nodes.json');
+      final file = await _getLocalFile('saved_nodes.json');
       final List<Map<String, String>> data = _savedNodes.map((node) => {
         'name': node.name,
         'protocol': node.protocol,
@@ -396,10 +486,9 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // تابع لود کردن سرورها از هارددیسک در زمان اجرای برنامه
   Future<void> _loadNodesFromDisk() async {
     try {
-      final file = File('saved_nodes.json');
+      final file = await _getLocalFile('saved_nodes.json');
       if (await file.exists()) {
         final String content = await file.readAsString();
         final List<dynamic> decoded = jsonDecode(content);
@@ -416,14 +505,13 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         });
       }
     } catch (e) {
-      debugPrint("خطا در لود کانفیگ‌ها از روی دیسک: $e");
+      debugPrint("خطا در لود کانفیگ‌ها از دیسک: $e");
     }
   }
 
-  // تابع ذخیره دی‌ان‌اس‌های سفارشی کاربر روی دیسک
   Future<void> _saveDnsToDisk() async {
     try {
-      final file = File('saved_dns.json');
+      final file = await _getLocalFile('saved_dns.json');
       final customDns = _dnsList.where((dns) => dns.isCustom).toList();
       final List<Map<String, dynamic>> data = customDns.map((dns) => {
         'name': dns.name,
@@ -440,10 +528,9 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // تابع لود کردن دی‌ان‌اس‌های سفارشی از هارددیسک در زمان بالا آمدن برنامه
   Future<void> _loadDnsFromDisk() async {
     try {
-      final file = File('saved_dns.json');
+      final file = await _getLocalFile('saved_dns.json');
       if (await file.exists()) {
         final String content = await file.readAsString();
         final List<dynamic> decoded = jsonDecode(content);
@@ -463,35 +550,237 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         });
       }
     } catch (e) {
-      debugPrint("خطا در لود دی‌ان‌اس‌ها از روی دیسک: $e");
+      debugPrint("خطا در لود دی‌ان‌اس‌های سفارشی: $e");
     }
+  }
+
+  Future<void> _saveAntiDpiToDisk() async {
+    try {
+      final file = await _getLocalFile('saved_anti_dpi.json');
+      final data = {
+        'utls_fingerprint': _selectedUtlsFingerprint,
+        'tls_fragment': _enableFragment,
+        'tls_record_fragment': _enableRecordFragment,
+        'fallback_delay': _fallbackDelayController.text,
+        'tls_spoof_enabled': _enableTlsSpoof,
+        'tls_spoof_sni': _tlsSpoofController.text,
+        'aether_noize': _selectedAetherNoize,
+        'aether_warp_key': _aetherWarpKeyController.text,
+        'aether_team': _aetherTeamController.text,
+      };
+      await file.writeAsString(jsonEncode(data));
+    } catch (e) {
+      debugPrint("خطا در ذخیره تنظیمات ضدسانسور: $e");
+    }
+  }
+
+  Future<void> _loadAntiDpiFromDisk() async {
+    try {
+      final file = await _getLocalFile('saved_anti_dpi.json');
+      if (await file.exists()) {
+        final String content = await file.readAsString();
+        final Map<String, dynamic> decoded = jsonDecode(content);
+        setState(() {
+          _selectedUtlsFingerprint = decoded['utls_fingerprint'] ?? 'chrome';
+          _enableFragment = decoded['tls_fragment'] ?? false;
+          _enableRecordFragment = decoded['tls_record_fragment'] ?? false;
+          _fallbackDelayController.text = decoded['fallback_delay'] ?? '500ms';
+          _enableTlsSpoof = decoded['tls_spoof_enabled'] ?? false;
+          _tlsSpoofController.text = decoded['tls_spoof_sni'] ?? 'zoom.us';
+          _selectedAetherNoize = decoded['aether_noize'] ?? 'firewall';
+          _aetherWarpKeyController.text = decoded['aether_warp_key'] ?? '';
+          _aetherTeamController.text = decoded['aether_team'] ?? '';
+        });
+      }
+    } catch (e) {
+      debugPrint("خطا در لود تنظیمات ضدسانسور: $e");
+    }
+  }
+
+  Future<void> _checkForUpdates({bool showSnackbarIfNoUpdate = false}) async {
+    setState(() => _isCheckingUpdate = true);
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.github.com/repos/Devtahas/RedCloud-windows/releases/latest'),
+        headers: {'User-Agent': 'RedCloud-Client'},
+      ).timeout(const Duration(seconds: 7));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final String tagName = (data['tag_name'] ?? '').toString().replaceAll('v', '').trim();
+        final String htmlUrl = data['html_url'] ?? githubRepoReleasesUrl;
+
+        if (tagName.isNotEmpty && tagName != appCurrentVersion) {
+          setState(() {
+            _hasUpdate = true;
+            _latestVersion = tagName;
+            _latestReleaseUrl = htmlUrl;
+          });
+        } else {
+          setState(() => _hasUpdate = false);
+          if (showSnackbarIfNoUpdate && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('شما از آخرین نسخه برنامه (v$appCurrentVersion) استفاده می‌کنید.')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("خطا در بررسی آپدیت: $e");
+    } finally {
+      if (mounted) setState(() => _isCheckingUpdate = false);
+    }
+  }
+
+  void _openDonationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF151824),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Color(0xFF6C5DD3), width: 1.5)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amberAccent.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.favorite_rounded, color: Colors.amberAccent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              const Text('حمایت مالی از پروژه RedCloud', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'از اینکه با حمایت مالی خود به توسعه، بقا و ارتقای سرورهای ضدسانسور RedCloud کمک می‌کنید، بی‌نهایت سپاسگزاریم.\nحمایت‌های ارزشمند شما انگیزه اصلی ما برای مبارزه با فیلترینگ و حفظ اینترنت آزاد برای همه است. ❤️',
+                  style: TextStyle(fontSize: 13, height: 1.6, color: Colors.white70),
+                  textAlign: TextAlign.justify,
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F111A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.currency_bitcoin_rounded, color: Colors.greenAccent, size: 18),
+                              SizedBox(width: 8),
+                              Text('آدرس تتر (USDT)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.greenAccent)),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                            ),
+                            child: const Text('شبکه BNB Smart Chain (BEP20)', style: TextStyle(fontSize: 10, color: Colors.amber, fontWeight: FontWeight.bold)),
+                          )
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SelectableText(
+                        usdtBnbAddress,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(const ClipboardData(text: usdtBnbAddress));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('آدرس ولت با موفقیت کپی شد! تشکر از حمایت شما ❤️'),
+                                backgroundColor: Color(0xFF2DCA73),
+                              ),
+                            );
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6C5DD3),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
+                          label: const Text('کپی آدرس ولت', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('بستن', style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   void initState() {
     super.initState();
-    _selectedDns = _dnsList[0]; // انتخاب اولین گزینه به عنوان پیش‌فرض
+    _selectedDns = _dnsList[0];
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
     
-    // افزودن شنونده‌ها فقط در صورت اجرا روی دسکتاپ ویندوز
+    _pulseAnimation = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController!, curve: Curves.easeInOut),
+    );
+    
     if (Platform.isWindows) {
       windowManager.addListener(this);
       trayManager.addListener(this);
       _initSystemTray();
     }
     _checkStatus();
-    _testDnsPing(); // گرفتن پینگ دی‌ان‌اس پیش‌فرض در شروع برنامه
-    _loadNodesFromDisk(); // لود خودکار تمام نودهای ذخیره‌شده از هارددیسک
-    _loadDnsFromDisk(); // لود خودکار دی‌ان‌اس‌های سفارشی ذخیره‌شده از هارددیسک
+    _testDnsPing();
+    _loadNodesFromDisk();
+    _loadDnsFromDisk();
+    _loadAntiDpiFromDisk();
+    _checkForUpdates();
   }
 
   @override
   void dispose() {
+    _pulseController?.dispose();
+    _aetherProgressTimer?.cancel();
     _torProgressTimer?.cancel();
     _psiphonProgressTimer?.cancel();
     _customSniController.dispose();
     _tlsSpoofController.dispose();
-    _stopTrafficMonitoring(); // لغو اتصال فعال استریم پایش سرعت زنده
-    _stopTelemetryReporting(); // غیرفعال کردن گزارش دوره‌ای ترافیک
+    _fallbackDelayController.dispose();
+    _aetherWarpKeyController.dispose();
+    _aetherTeamController.dispose();
+    _stopTrafficMonitoring();
+    _stopTelemetryReporting();
     if (Platform.isWindows) {
       windowManager.removeListener(this);
       trayManager.removeListener(this);
@@ -499,17 +788,15 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     super.dispose();
   }
 
-  // فعال‌سازی پایش زنده و واقعی سرعت از Clash API داخلی sing-box
   void _startTrafficMonitoring() async {
-    _stopTrafficMonitoring(); // قطع و ریست اتصالات قبلی جهت جلوگیری از تداخل
+    _stopTrafficMonitoring();
     
     try {
       final client = HttpClient();
-      // لایه دور زدن قطعی پروکسی سیستم برای برقراری ارتباط مستقیم با لوکال‌هاست روی پورت ۹۰۹۰
       client.findProxy = (uri) => "DIRECT"; 
       
       final request = await client.getUrl(Uri.parse('http://127.0.0.1:9090/traffic'));
-      const double fiveGB = 5.0 * 1024 * 1024 * 1024; // سقف ۵ گیگابایت سهمیه مصرفی
+      const double fiveGB = 5.0 * 1024 * 1024 * 1024;
       final response = await request.close();
       
       _trafficSubscription = response
@@ -522,14 +809,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
           final double up = (data['up'] as num).toDouble(); 
           final double down = (data['down'] as num).toDouble(); 
           
-          // جمع‌آوری مجموع مصرف ترافیک این نشست کلاینت
           _sessionBytesUsed += (up + down);
 
-          // چرخیش خودکار در صورت اتمام ظرفیت ۵ گیگابایتی این اکانت
           if (_selectedGithubAccount != null) {
             final double totalBytes = _selectedGithubAccount!.usedBytes + _sessionBytesUsed;
             if (totalBytes >= fiveGB) {
-              _handleAutoRotation(); // فعال‌سازی فرآیند چرخش خودکار به اکانت جایگزین
+              _handleAutoRotation();
             }
           }
 
@@ -548,7 +833,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // غیرفعال کردن مانیتورینگ ترافیک زنده
   void _stopTrafficMonitoring() {
     _trafficSubscription?.cancel();
     _trafficSubscription = null;
@@ -558,14 +842,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     });
   }
 
-  // ارسال گزارش دوره‌ای ترافیک مصرفی به ورکر مرکزی شما
   void _startTelemetryReporting() {
     _stopTelemetryReporting();
     _sessionBytesUsed = 0;
     
-    // اجرای یک تایمر ۳ دقیقه‌ای برای مخابره ترافیک کلاینت به ورکر مرکزی
     _telemetryTimer = Timer.periodic(const Duration(minutes: 3), (timer) async {
-      if (_sessionBytesUsed > 1024 * 1024) { // فقط در صورتی که بیشتر از ۱ مگابایت مصرف شده باشد
+      if (_sessionBytesUsed > 1024 * 1024) {
         await _sendTrafficReport();
       }
     });
@@ -575,11 +857,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     if (_sessionBytesUsed > 0) {
-      await _sendTrafficReport(); // ارسال آخرین ترافیک مصرفی زمان بستن
+      await _sendTrafficReport();
     }
   }
 
-  // ارسال فیزیکی پکت تله‌متری به ورکر مرکزی
   Future<void> _sendTrafficReport() async {
     if (_selectedNode == null) return;
     
@@ -588,7 +869,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     
     try {
       final response = await http.post(
-        Uri.parse("$MANAGER_WORKER_URL/api/report"),
+        Uri.parse("$managerWorkerUrl/api/report"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "worker": workerHost,
@@ -597,7 +878,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       );
       
       if (response.statusCode == 200) {
-        _sessionBytesUsed = 0; // ریست پس از ارسال موفق
+        _sessionBytesUsed = 0;
         debugPrint("گزارش ترافیک با موفقیت مخابره شد.");
       }
     } catch (e) {
@@ -605,7 +886,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // قالب‌بندی تبدیل بایت بر ثانیه به کیلوبایت و مگابایت بر ثانیه به صورت هوشمند
   String _formatSpeed(double bytesPerSecond) {
     if (bytesPerSecond < 1024) {
       return "${bytesPerSecond.toStringAsFixed(1)} B/s";
@@ -616,7 +896,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // فرآیند مأموریت پینگ گروهی و مرتب‌سازی موازی با لایه راست دسکتاپ
   Future<void> _bulkPingAndSort() async {
     setState(() {
       _isBulkPinging = true;
@@ -631,7 +910,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
           final host = uri.host;
           final port = uri.port;
           
-          // فراخوانی مستقیم متد بومی راست برای بررسی TCP Handshake Latency
           final latency = await pingProxyServer(host: host, port: port);
           _nodePings[node.rawUrl] = latency;
         } catch (_) {
@@ -642,7 +920,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
 
     await Future.wait(pingFutures);
 
-    // مرتب‌سازی هوشمند: پینگ‌های سریع در بالای لیست و پینگ‌های قطع (-1) در انتهای لیست
     setState(() {
       _savedNodes.sort((a, b) {
         final pingA = _nodePings[a.rawUrl] ?? 99999;
@@ -659,7 +936,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     });
   }
 
-  // متد باز کردن دیالوگ پیشرفته ادیت دستی پارامترهای هر کانفیگ
   void _openEditDialog(ProxyNode node, int index) {
     final config = V2rayConfig.parse(node.rawUrl);
     
@@ -670,7 +946,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     final hostController = TextEditingController(text: config.host);
     final pathController = TextEditingController(text: config.path);
     final sniController = TextEditingController(text: config.sni);
-    final echController = TextEditingController();
+    final echController = TextEditingController(text: config.echConfig);
+    final pbkController = TextEditingController(text: config.publicKey);
+    final sidController = TextEditingController(text: config.shortId);
+    final spxController = TextEditingController(text: config.spiderX);
 
     String selectedProtocol = config.protocol;
     String selectedTransport = config.transport;
@@ -690,7 +969,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                 children: [
                   Icon(Icons.edit_rounded, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 12),
-                  const Text('ویرایش پیکربندی سرور (VLESS / Trojan)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text('ویرایش پیکربندی سرور (VLESS / Trojan / Hysteria2)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SizedBox(
@@ -713,7 +992,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                                 setDialogState(() => selectedProtocol = val);
                               }
                             },
-                            items: ['vless', 'trojan'].map((p) => DropdownMenuItem(value: p, child: Text(p.toUpperCase()))).toList(),
+                            items: ['vless', 'trojan', 'hysteria2'].map((p) => DropdownMenuItem(value: p, child: Text(p.toUpperCase()))).toList(),
                           )
                         ],
                       ),
@@ -729,112 +1008,130 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _buildDialogField('شناسه کاربر (UUID / Password)', uuidController),
+                      _buildDialogField(
+                        selectedProtocol == 'hysteria2' ? 'رمز عبور احراز هویت (Auth Password)' : 'شناسه کاربر (UUID / Password)', 
+                        uuidController
+                      ),
                       const SizedBox(height: 12),
                       
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('پروتکل انتقال (Transport):', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          DropdownButton<String>(
-                            value: selectedTransport,
-                            dropdownColor: const Color(0xFF0F111A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedTransport = val);
-                              }
-                            },
-                            items: ['ws', 'tcp', 'grpc', 'http'].map((t) => DropdownMenuItem(value: t, child: Text(t.toUpperCase()))).toList(),
-                          )
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                      if (selectedProtocol != 'hysteria2') ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('پروتکل انتقال (Transport):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            DropdownButton<String>(
+                              value: selectedTransport,
+                              dropdownColor: const Color(0xFF0F111A),
+                              underline: const SizedBox(),
+                              style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedTransport = val);
+                                }
+                              },
+                              items: ['ws', 'tcp', 'grpc', 'http'].map((t) => DropdownMenuItem(value: t, child: Text(t.toUpperCase()))).toList(),
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 12),
 
-                      _buildDialogField('میزبان وب‌ساکت (Host)', hostController),
-                      const SizedBox(height: 12),
-                      _buildDialogField('مسیر وب‌ساکت (Path)', pathController),
-                      const SizedBox(height: 12),
+                        _buildDialogField('میزبان وب‌ساکت (Host)', hostController),
+                        const SizedBox(height: 12),
+                        _buildDialogField('مسیر وب‌ساکت (Path)', pathController),
+                        const SizedBox(height: 12),
+                      ],
 
                       const Divider(color: Colors.white12, height: 24),
-                      const Text('تنظیمات امنیت لایه اتصال (TLS)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      const Text('تنظیمات امنیت لایه اتصال (TLS / Reality)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
                       const SizedBox(height: 12),
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('نوع امنیت (Security):', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          DropdownButton<String>(
-                            value: selectedSecurity,
-                            dropdownColor: const Color(0xFF0F111A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedSecurity = val);
-                              }
-                            },
-                            items: ['tls', 'reality', 'none'].map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase()))).toList(),
-                          )
-                        ],
-                      ),
+                      if (selectedProtocol != 'hysteria2') ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('نوع امنیت (Security):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            DropdownButton<String>(
+                              value: selectedSecurity,
+                              dropdownColor: const Color(0xFF0F111A),
+                              underline: const SizedBox(),
+                              style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedSecurity = val);
+                                }
+                              },
+                              items: ['tls', 'reality', 'none'].map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase()))).toList(),
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      _buildDialogField('نام سرور امن (SNI / Peer)', sniController),
                       const SizedBox(height: 12),
 
-                      _buildDialogField('نام سرور امن (SNI)', sniController),
-                      const SizedBox(height: 12),
+                      if (selectedSecurity == 'reality') ...[
+                        _buildDialogField('کلید عمومی ریالیتی (Public Key / pbk)', pbkController),
+                        const SizedBox(height: 12),
+                        _buildDialogField('شناسه کوتاه ریالیتی (Short ID / sid)', sidController),
+                        const SizedBox(height: 12),
+                        _buildDialogField('مسیر اسپایدر (SpiderX / spx)', spxController),
+                        const SizedBox(height: 12),
+                      ],
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('اثر انگشت مرورگر (Fingerprint):', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          DropdownButton<String>(
-                            value: selectedFingerprint,
-                            dropdownColor: const Color(0xFF0F111A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedFingerprint = val);
-                              }
-                            },
-                            items: ['chrome', 'firefox', 'safari', 'edge', 'randomized'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-                          )
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                      if (selectedProtocol != 'hysteria2') ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('اثر انگشت مرورگر (Fingerprint):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            DropdownButton<String>(
+                              value: selectedFingerprint,
+                              dropdownColor: const Color(0xFF0F111A),
+                              underline: const SizedBox(),
+                              style: const TextStyle(fontSize: 12, color: Colors.white),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedFingerprint = val);
+                                }
+                              },
+                              items: ['chrome', 'firefox', 'safari', 'edge', 'randomized'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 12),
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('پروتکل ALPN:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          DropdownButton<String>(
-                            value: selectedAlpn,
-                            dropdownColor: const Color(0xFF0F111A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setDialogState(() => selectedAlpn = val);
-                              }
-                            },
-                            items: ['http/1.1', 'h2', 'http/1.1,h2'].map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
-                          )
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('پروتکل ALPN:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            DropdownButton<String>(
+                              value: selectedAlpn,
+                              dropdownColor: const Color(0xFF0F111A),
+                              underline: const SizedBox(),
+                              style: const TextStyle(fontSize: 12, color: Colors.white),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedAlpn = val);
+                                }
+                              },
+                              items: ['http/1.1', 'h2', 'http/1.1,h2'].map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('نادیده گرفتن خطای گواهی امنیتی (Allow Insecure)', style: TextStyle(fontSize: 12)),
                         value: allowInsecure,
-                        activeColor: const Color(0xFF6C5DD3),
+                        activeThumbColor: const Color(0xFF6C5DD3),
                         onChanged: (val) {
                           setDialogState(() => allowInsecure = val);
                         },
                       ),
                       const SizedBox(height: 12),
-                      _buildDialogField('EchConfigList', echController),
+                      _buildDialogField('رشته پیکربندی رمزنگاری هدر (EchConfigList)', echController, hint: 'کد Base64 یا لیست ECH Config'),
                     ],
                   ),
                 ),
@@ -860,6 +1157,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       fingerprint: selectedFingerprint,
                       alpn: selectedAlpn,
                       allowInsecure: allowInsecure,
+                      publicKey: pbkController.text.trim(),
+                      shortId: sidController.text.trim(),
+                      spiderX: spxController.text.trim(),
+                      echConfig: echController.text.trim(),
                     );
 
                     setState(() {
@@ -871,10 +1172,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       if (_selectedNode == node) {
                         _selectedNode = _savedNodes[index];
                       }
-                      _statusMessage = "تنظیمات سرور '${updatedConfig.alias}' با موفقیت به‌روزرسانی شد.";
+                      _statusMessage = "تنظیمات سرور '${updatedConfig.alias}' به‌روزرسانی شد.";
                     });
-                    await _saveNodesToDisk(); // ثبت تغییرات روی دیسک
-                    Navigator.of(context).pop();
+                    
+                    final navigator = Navigator.of(context);
+                    await _saveNodesToDisk();
+                    navigator.pop();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C5DD3)),
                   child: const Text('ثبت تغییرات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -887,7 +1190,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  // متد باز کردن دیالوگ ساخت دی‌ان‌اس سفارشی جدید توسط کاربر
   void _openAddDnsDialog() {
     final nameController = TextEditingController();
     final primaryController = TextEditingController();
@@ -917,7 +1219,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildDialogField('نام نمایشی دی‌ان‌اس (مثلاً: NextDNS من)', nameController),
+                      _buildDialogField('نام نمایشی دی‌ان‌اس', nameController),
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -940,14 +1242,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       const SizedBox(height: 12),
                       _buildDialogField('آدرس آی‌پی اصلی (Primary IP)', primaryController),
                       const SizedBox(height: 12),
-                      _buildDialogField('آدرس آی‌پی ثانویه (Secondary IP - اختیاری)', secondaryController),
+                      _buildDialogField('آدرس آی‌پی ثانویه (Secondary IP)', secondaryController),
                       const SizedBox(height: 12),
                       if (selectedType == 'doh') ...[
-                        _buildDialogField('لینک بستر DoH (مثلاً: https://dns.nextdns.io)', dohUrlController),
+                        _buildDialogField('لینک بستر DoH', dohUrlController),
                         const SizedBox(height: 12),
                       ],
                       if (selectedType == 'dot') ...[
-                        _buildDialogField('هاست امن DoT (مثلاً: dns.nextdns.io)', dotHostController),
+                        _buildDialogField('هاست امن DoT', dotHostController),
                         const SizedBox(height: 12),
                       ],
                       _buildDialogField('توضیحات کوتاه دی‌ان‌اس', descriptionController),
@@ -973,19 +1275,21 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       name: nameController.text.trim(),
                       primary: primaryController.text.trim(),
                       secondary: secondaryController.text.trim().isEmpty ? primaryController.text.trim() : secondaryController.text.trim(),
-                      description: descriptionController.text.trim().isEmpty ? 'دی‌ان‌اس سفارشی ثبت شده توسط کاربر' : descriptionController.text.trim(),
+                      description: descriptionController.text.trim().isEmpty ? 'دی‌ان‌اس سفارشی کاربر' : descriptionController.text.trim(),
                       dnsType: selectedType,
                       dohUrl: selectedType == 'doh' ? dohUrlController.text.trim() : null,
                       dotHost: selectedType == 'dot' ? dotHostController.text.trim() : null,
-                      isCustom: true, // نشانگر کاستوم بودن جهت امکان حذف آسان
+                      isCustom: true,
                     );
 
                     setState(() {
                       _dnsList.add(newDns);
                       _selectedDns = newDns;
                     });
-                    await _saveDnsToDisk(); // ثبت فیزیکی دی‌ان‌اس‌های جدید سفارشی در دیسک
-                    Navigator.of(context).pop();
+                    
+                    final navigator = Navigator.of(context);
+                    await _saveDnsToDisk();
+                    navigator.pop();
                     _testDnsPing();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C5DD3)),
@@ -1014,7 +1318,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  // فرآیند استارت سرویس بومی VPN در اندروید
   Future<void> _startAndroidVpn(String configJson) async {
     try {
       final String result = await _androidVpnChannel.invokeMethod('startVpn', {
@@ -1025,12 +1328,11 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       });
     } catch (e) {
       setState(() {
-        _statusMessage = "خطا در برقراری ارتباط با VPN اندروید: $e";
+        _statusMessage = "خطا در اتصال به VPN اندروید: $e";
       });
     }
   }
 
-  // فرآیند متوقف کردن سرویس بومی VPN در اندروید
   Future<void> _stopAndroidVpn() async {
     try {
       final String result = await _androidVpnChannel.invokeMethod('stopVpn');
@@ -1044,7 +1346,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // تست زنده پینگ دی‌ان‌اس انتخابی روی پورت ۵۳
   Future<void> _testDnsPing() async {
     setState(() {
       _isPingingDns = true;
@@ -1064,12 +1365,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // راه‌اندازی و افزودن منوی راست‌کلیک بومی کنار ساعت با آدرس مطلق پویا و بدون خطا
   Future<void> _initSystemTray() async {
     String iconPath = 'assets/app_icon.ico';
     
     if (kReleaseMode) {
-      // ساخت آدرس فیزیکی و مطلق آیکون نسبت به محل اجرای فایل .exe جهت لود قطعی در ویندوز
       final String exePath = Platform.resolvedExecutable;
       final String exeDir = exePath.substring(0, exePath.lastIndexOf('\\'));
       iconPath = '$exeDir\\data\\flutter_assets\\assets\\app_icon.ico';
@@ -1079,80 +1378,80 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     await trayManager.setToolTip('RedCloud VPN');
 
     List<MenuItem> items = [
-      MenuItem(
-        key: 'show_window',
-        label: 'باز کردن برنامه',
-      ),
-      MenuItem.separator(), // خط جداساز میانی منو
-      MenuItem(
-        key: 'exit_app',
-        label: 'خروج کامل',
-      ),
+      MenuItem(key: 'show_window', label: 'باز کردن برنامه'),
+      MenuItem.separator(),
+      MenuItem(key: 'exit_app', label: 'خروج کامل'),
     ];
     await trayManager.setContextMenu(Menu(items: items));
   }
 
-  // شنونده: متوقف کردن فرآیند بسته‌شدن و مخفی کردن پنجره به جایش
   @override
   void onWindowClose() async {
     bool isPreventClose = await windowManager.isPreventClose();
     if (isPreventClose) {
-      await windowManager.hide(); // مخفی کردن پنجره به جای بستن کامل ترافیک پروکسی
+      await windowManager.hide();
       setState(() {
-        _statusMessage = "برنامه در پس‌زمینه و کنار ساعت ویندوز فعال است.";
+        _statusMessage = "برنامه در پس‌زمینه و کنار ساعت فعال است.";
       });
     }
   }
 
-  // شنونده: پاسخ به کلیک روی منوهای راست‌کلیک کنار ساعت ویندوز
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
     if (menuItem.key == 'show_window') {
       await windowManager.show();
       await windowManager.focus();
     } else if (menuItem.key == 'exit_app') {
-      // ۱. ابتدا اتصالات در حال اجرا را به طور ایمن قطع کن
+      if (_isHybridRunning) await stopHybridConnection();
       if (_isProxyRunning) await stopProxyCore();
+      if (_isAetherRunning || _isAetherConnecting) await stopAetherCore();
       if (_isTorRunning) await stopTorCore();
       if (_isPsiphonRunning) await stopPsiphonCore();
       if (_isDnsRunning) await resetSystemDns();
 
-      // ۲. پراکسی سیستم را ریست کن و سیستم تری را آزاد کن
       await trayManager.destroy();
-      
-      // ۳. برنامه را کاملاً ببند
       await windowManager.destroy(); 
     }
   }
 
-  // شنونده: باز کردن برنامه به محض کلیک چپ روی آیکون ساعت
   @override
   void onTrayIconMouseDown() async {
     await windowManager.show();
     await windowManager.focus();
   }
 
-  // شنونده بومی بسیار حیاتی برای ویندوز: به محض راست‌کلیک، منوی کشویی contextMenu را پاپ‌آپ کن
   @override
   void onTrayIconRightMouseDown() async {
     await trayManager.popUpContextMenu();
   }
 
   Future<void> _checkStatus() async {
+    final activeHybrid = await isHybridConnected();
     final activeProxy = await isConnected();
+    final activeAether = await isAetherConnected();
     final activeTor = await isTorConnected();
-    final activePsiphon = await isPsiphonConnected(); // هماهنگی کامل نام‌گذاری راست
+    final activePsiphon = await isPsiphonConnected();
     final activeDns = await isDnsActive();
+    
     setState(() {
-      _isProxyRunning = activeProxy;
+      _isHybridRunning = activeHybrid;
+      _isProxyRunning = activeProxy && !activeHybrid;
+      _isAetherRunning = activeAether && !activeHybrid;
       _isTorRunning = activeTor;
       _isPsiphonRunning = activePsiphon;
       _isDnsRunning = activeDns;
       
-      if (activeProxy) {
+      if (activeHybrid) {
+        _statusMessage = "متصل به اتصال هیبریدی RedCloud (پل اِتر + Sing-box)";
+        _startTrafficMonitoring();
+        _fetchIpInfo();
+      } else if (activeAether) {
+        _statusMessage = "متصل به شبکه ضدسانسور اِتر (MASQUE)";
+        _fetchIpInfo();
+      } else if (activeProxy) {
         _statusMessage = "متصل به سرور ویتوری";
-        _startTrafficMonitoring(); // آغاز به کار مانیتور سرعت زنده به محض فعال شدن استاتوس
-        _startTelemetryReporting(); // آغاز به کار فرستنده گزارش ترافیک بومی
+        _startTrafficMonitoring();
+        _startTelemetryReporting();
         _fetchIpInfo();
       } else if (activeTor) {
         _statusMessage = "متصل به شبکه پیاز تور";
@@ -1168,9 +1467,8 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     });
   }
 
-  // دریافت و استعلام اطلاعات آی‌پی و موقعیت جغرافیایی سرور پروکسی متصل شده
   Future<void> _fetchIpInfo() async {
-    if (!_isProxyRunning && !_isTorRunning && !_isPsiphonRunning) return;
+    if (!_isProxyRunning && !_isAetherRunning && !_isHybridRunning && !_isTorRunning && !_isPsiphonRunning) return;
 
     setState(() {
       _isLoadingIpInfo = true;
@@ -1200,20 +1498,18 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     } catch (e) {
       setState(() {
         _isLoadingIpInfo = false;
-        _statusMessage = "خطا در استعلام موقعیت جغرافیایی. دکمه رفرش را بزنید.";
+        _statusMessage = "خطا در استعلام موقعیت جغرافیایی.";
       });
     }
   }
 
-  // متد دریافت و پارس هوشمند اکانت‌ها از دایرکتوری JSON گیت‌هاب که با ادمین-ورکر سینک است
   Future<void> _fetchGithubAccounts() async {
     setState(() {
       _isLoadingAccounts = true;
-      _statusMessage = "در حال دریافت لیست اکانت‌های فعال و ظرفیت‌سنجی از گیت‌هاب...";
+      _statusMessage = "در حال دریافت لیست اکانت‌های فعال از گیت‌هاب...";
     });
 
     try {
-      // آدرس گیت‌هاب شخصی شما حاوی فایل accounts.json ساخته شده توسط ورکر مرکزی
       final response = await http.get(Uri.parse(
         'https://raw.githubusercontent.com/Devtahas/Devtahas-redcloud-config/main/accounts.json'
       ));
@@ -1224,8 +1520,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         List<VlessAccount> parsedList = [];
         for (var item in jsonList) {
           final String status = item['status'] ?? 'full';
-          
-          // ۱. فیلتر کردن هوشمند اکانت‌های سوخته (exhausted) جهت جلوگیری از اتصالات ناموفق
           if (status == 'exhausted') continue;
 
           parsedList.add(VlessAccount(
@@ -1239,17 +1533,15 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         }
 
         if (parsedList.isEmpty) {
-          throw Exception("تمام سرورهای اشتراکی در حال حاضر پر هستند؛ منتظر شارژ مجدد بمانید.");
+          throw Exception("تمام سرورهای اشتراکی پر هستند.");
         }
 
-        // ۲. مرتب‌سازی هوشمند: اکانت‌های فول شارژ ابتدا قرار بگیرند، سپس متوسط
         parsedList.sort((a, b) {
           final int priorityA = a.status == 'full' ? 1 : 2;
           final int priorityB = b.status == 'full' ? 1 : 2;
           return priorityA.compareTo(priorityB);
         });
 
-        // ۳. انتخاب تصادفی ۵ سرور از صدر لیست اولویت‌دار جهت لودبالانس پویا
         final int takeCount = parsedList.length < 5 ? parsedList.length : 5;
         final selectedRandoms = parsedList.take(takeCount).toList();
 
@@ -1268,7 +1560,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         setState(() {
           _githubAccounts = finalAccounts;
           _isLoadingAccounts = false;
-          _statusMessage = "تعداد ${_githubAccounts.length} اکانت فاقد قطعی با موفقیت بارگذاری شد.";
+          _statusMessage = "تعداد ${_githubAccounts.length} اکانت بارگذاری شد.";
           
           if (_githubAccounts.isNotEmpty) {
             _selectAccount(_githubAccounts.first);
@@ -1292,50 +1584,42 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       _uuidController.text = account.uuid;
       _workerController.text = account.worker;
       _pathController.text = account.path;
-      _statusMessage = "اطلاعات ${account.name} روی فیلدهای ورودی اعمال گردید.";
+      _statusMessage = "اطلاعات ${account.name} روی فیلدها اعمال شد.";
     });
   }
 
-  // چرخش خودکار کانفیگ و سوییچ کردن به اکانت پشتیبان در صورت اتمام ظرفیت
   Future<void> _handleAutoRotation() async {
-    await _stopTelemetryReporting(); // گزارش آخرین وضعیت مصرف
-    if (_isProxyRunning) {
+    await _stopTelemetryReporting();
+    if (_isHybridRunning) {
+      await stopHybridConnection();
+    } else if (_isProxyRunning) {
       await stopProxyCore();
-      _stopTrafficMonitoring();
     }
+    _stopTrafficMonitoring();
     
-    // ۱. نمایش پیام وضعیت در داشبورد
     setState(() {
-      _statusMessage = "ظرفیت مصرف روزانه اکانت به پایان رسید! در حال چرخش و اتصال خودکار به سرور جایگزین...";
+      _statusMessage = "ظرفیت اکانت به پایان رسید! در حال چرخش خودکار...";
     });
     
-    // ۲. دانلود سریع لیست جدید سرورهای وایت‌لیست نشده از گیت‌هاب
     await _fetchGithubAccounts();
     
     if (_githubAccounts.isNotEmpty) {
-      // ۳. اجرای اسکنر خودکار کلودفلر برای یافتن آی‌پی‌های تمیز روی ورکر جدید
       await _startCloudflareScanning();
-      
-      // ۴. اتصال خودکار به بهترین آی‌پی تمیز ورکر جدید
       if (_selectedNode != null) {
         await _toggleV2RayConnection();
       }
-    } else {
-      setState(() {
-        _statusMessage = "سرورهای اشتراکی موقتاً در حال به‌روزرسانی هستند؛ از شکیبایی شما سپاسگزاریم.";
-      });
     }
   }
 
   Future<void> _startCloudflareScanning() async {
     if (_uuidController.text.isEmpty || _pathController.text.isEmpty || _workerController.text.isEmpty) {
-      setState(() => _statusMessage = "خطا: لطفاً ابتدا اطلاعات اکانت را پر یا دریافت کنید.");
+      setState(() => _statusMessage = "خطا: لطفاً ابتدا اطلاعات اکانت را پر کنید.");
       return;
     }
 
     setState(() {
       _isScanning = true;
-      _statusMessage = "در حال شروع اسکن چندنخی آی‌پی‌های ترانزیت کلودفلر...";
+      _statusMessage = "در حال شروع اسکن چندنخی آی‌پی‌های کلودفلر...";
     });
 
     try {
@@ -1348,9 +1632,9 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       setState(() {
         _isScanning = false;
         if (cleanNodes.isEmpty) {
-          _statusMessage = "اسکن پایان یافت؛ هیچ آی‌پی تمیزی با پینگ مناسب پیدا نشد.";
+          _statusMessage = "اسکن پایان یافت؛ هیچ آی‌پی تمیزی یافت نشد.";
         } else {
-          _statusMessage = "اسکن پایان یافت! تعداد ${cleanNodes.length} آی‌پی تمیز و پرسرعت یافت شد.";
+          _statusMessage = "اسکن پایان یافت! تعداد ${cleanNodes.length} آی‌پی تمیز یافت شد.";
           
           _savedNodes.removeWhere((n) => n.name.startsWith("From Scanner"));
           for (var node in cleanNodes) {
@@ -1363,11 +1647,11 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
           _selectedNode = _savedNodes.firstWhere((n) => n.name.startsWith("From Scanner"));
         }
       });
-      await _saveNodesToDisk(); // ثبت تغییرات روی دیسک
+      await _saveNodesToDisk();
     } catch (e) {
       setState(() {
         _isScanning = false;
-        _statusMessage = "خطا در فرآیند اسکن: $e";
+        _statusMessage = "خطا در اسکن: $e";
       });
     }
   }
@@ -1376,7 +1660,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     final text = _importController.text.trim();
     if (text.isEmpty) return;
 
-    setState(() => _statusMessage = "در حال پردازش ورودی...0");
+    setState(() => _statusMessage = "در حال پردازش ورودی...");
 
     try {
       String rawContent = text;
@@ -1395,10 +1679,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       setState(() {
         _savedNodes.addAll(parsedNodes);
         _importController.clear();
-        _statusMessage = "تعداد ${parsedNodes.length} سرور با موفقیت اضافه شد.";
+        _statusMessage = "تعداد ${parsedNodes.length} سرور اضافه شد.";
         _selectedNode ??= _savedNodes.first;
       });
-      await _saveNodesToDisk(); // ثبت تغییرات روی دیسک
+      await _saveNodesToDisk();
     } catch (e) {
       setState(() {
         _statusMessage = "خطا در اضافه کردن ورودی: ${e.toString()}";
@@ -1406,74 +1690,115 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // ۱. متد اتصال اختصاصی سرورهای V2Ray (داشبورد) - مجهز به تفکیک پلتفرم اندروید و ویندوز
+  // متد اصلی اتصال داشبورد: اتصال هیبریدی یا مستقیم
   Future<void> _toggleV2RayConnection() async {
     try {
       if (Platform.isWindows) {
-        // الف) سناریوی سیستم‌عامل ویندوز دسکتاپ
-        if (_isProxyRunning) {
-          await _stopTelemetryReporting(); // گزارش آمار ترافیک زمان قطع پروکسی
-          final msg = await stopProxyCore();
-          _stopTrafficMonitoring(); // قطع زنده پایش سرعت به محض خاموش شدن پروکسی
+        if (_isHybridRunning || _isProxyRunning) {
+          await _stopTelemetryReporting();
+          
+          final String msg = _isHybridRunning 
+              ? await stopHybridConnection() 
+              : await stopProxyCore();
+              
+          _stopTrafficMonitoring();
           setState(() {
+            _isHybridRunning = false;
             _isProxyRunning = false;
             _statusMessage = msg;
             _resetIpInfo();
           });
         } else {
           if (_selectedNode == null) {
-            setState(() => _statusMessage = "خطا: لطفاً ابتدا یک سرور را از بخش پیکربندی انتخاب کنید.");
-            return;
+            setState(() => _statusMessage = "در حال دریافت خودکار اکانت و آماده‌سازی کانفیگ...");
+            await _fetchGithubAccounts();
+            if (_githubAccounts.isNotEmpty) {
+              await _startCloudflareScanning();
+            }
+            if (_selectedNode == null) {
+              setState(() => _statusMessage = "خطا: لطفاً ابتدا یک سرور را از بخش پیکربندی انتخاب کنید.");
+              return;
+            }
           }
 
-          if (_isTorRunning || _isTorConnecting) {
-            _torProgressTimer?.cancel();
-            await stopTorCore();
+          if (_isAetherRunning || _isAetherConnecting) {
+            _aetherProgressTimer?.cancel();
+            await stopAetherCore();
             setState(() {
-              _isTorRunning = false;
-              _isTorConnecting = false;
-              _torProgressPercent = 0;
+              _isAetherRunning = false;
+              _isAetherConnecting = false;
             });
+          }
+          if (_isTorRunning) {
+            await stopTorCore();
+            setState(() => _isTorRunning = false);
           }
           if (_isPsiphonRunning) {
             await stopPsiphonCore();
             setState(() => _isPsiphonRunning = false);
           }
 
-          // ارسال آرگومان‌های جدید Anti-DPI و TUN و DNS بومی به تابع راست دسکتاپ
-          final msg = await startProxyWithNode(
-            binaryPath: _binaryPathController.text,
-            selectedNode: _selectedNode!,
-            useSystemProxy: _useSystemProxy,
-            customSni: _customSniController.text.trim().isEmpty ? null : _customSniController.text.trim(),
-            enableFragment: _enableFragment,
-            enableRecordFragment: _enableRecordFragment,
-            tlsSpoof: _tlsSpoofController.text.trim().isEmpty ? null : _tlsSpoofController.text.trim(),
-            useTunMode: _useTunMode, // ارسال پارامتر جدید شبکه مجازی به Rust
-            dnsType: _selectedDns.dnsType,
-            dnsPrimary: _selectedDns.primary,
-            dnsSecondary: _selectedDns.secondary,
-            dnsDohUrl: _selectedDns.dohUrl,
-            dnsDotHost: _selectedDns.dotHost,
-          );
+          if (_isHybridModeEnabled) {
+            setState(() {
+              _statusMessage = "در حال ایجاد پل چرخشی اِتر و زنجیره‌سازی با Sing-box...";
+            });
 
-          setState(() {
-            _isProxyRunning = true;
-            _statusMessage = msg;
-          });
+            final msg = await startHybridConnection(
+              singboxPath: _binaryPathController.text.trim(),
+              aetherPath: _aetherPathController.text.trim(),
+              selectedNode: _selectedNode!,
+              aetherMode: _selectedAetherMode,
+              aetherNoize: _selectedAetherNoize,
+              aetherWarpKey: _aetherWarpKeyController.text.trim().isEmpty ? null : _aetherWarpKeyController.text.trim(),
+              aetherTeam: _aetherTeamController.text.trim().isEmpty ? null : _aetherTeamController.text.trim(),
+              useSystemProxy: _useSystemProxy,
+              useTunMode: _useTunMode,
+              dnsType: _selectedDns.dnsType,
+              dnsPrimary: _selectedDns.primary,
+              dnsSecondary: _selectedDns.secondary,
+              dnsDotHost: _selectedDns.dotHost,
+              utlsFingerprint: _selectedUtlsFingerprint,
+            );
 
-          // ۲ ثانیه مکث برای لود کامل هسته و سپس فعال‌سازی استریم سرعت زنده و تله‌متری ترافیک
+            setState(() {
+              _isHybridRunning = true;
+              _statusMessage = msg;
+            });
+          } else {
+            final msg = await startProxyWithNode(
+              binaryPath: _binaryPathController.text.trim(),
+              selectedNode: _selectedNode!,
+              useSystemProxy: _useSystemProxy,
+              customSni: _customSniController.text.trim().isEmpty ? null : _customSniController.text.trim(),
+              enableFragment: _enableFragment,
+              enableRecordFragment: _enableRecordFragment,
+              tlsSpoof: _enableTlsSpoof && _tlsSpoofController.text.trim().isNotEmpty ? _tlsSpoofController.text.trim() : null,
+              useTunMode: _useTunMode,
+              dnsType: _selectedDns.dnsType,
+              dnsPrimary: _selectedDns.primary,
+              dnsSecondary: _selectedDns.secondary,
+              dnsDohUrl: _selectedDns.dohUrl,
+              dnsDotHost: _selectedDns.dotHost,
+              utlsFingerprint: _selectedUtlsFingerprint,
+              fragmentFallbackDelay: _fallbackDelayController.text.trim().isEmpty ? null : _fallbackDelayController.text.trim(),
+            );
+
+            setState(() {
+              _isProxyRunning = true;
+              _statusMessage = msg;
+            });
+          }
+
           Future.delayed(const Duration(seconds: 2), () {
-            if (_isProxyRunning) {
+            if (_isHybridRunning || _isProxyRunning) {
               _startTrafficMonitoring();
-              _startTelemetryReporting(); // شروع تله‌متری دوره‌ای ترافیک مصرفی کلاینت
+              _startTelemetryReporting();
             }
           });
 
           _fetchIpInfo();
         }
       } else if (Platform.isAndroid) {
-        // ب) سناریوی سیستم‌عامل بومی اندروید گوشی
         if (_isProxyRunning) {
           await _stopAndroidVpn();
           setState(() {
@@ -1485,8 +1810,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             setState(() => _statusMessage = "خطا: لطفاً ابتدا یک سرور انتخاب کنید.");
             return;
           }
-          
-          // ساخت کانفیگ داینامیک و ارسال آن به بستر بومی اندروید
           await _startAndroidVpn(_selectedNode!.rawUrl);
           setState(() {
             _isProxyRunning = true;
@@ -1494,15 +1817,108 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         }
       }
     } catch (e) {
-      setState(() => _statusMessage = "خطا در اتصال ویتوری: ${e.toString()}");
+      setState(() => _statusMessage = "خطا در اتصال: ${e.toString()}");
     }
   }
 
-  // ۲. متد اتصال اختصاصی و هوشمند شبکه پیاز تور - مجهز به تفکیک پلتفرم اندروید و ویندوز
+  // اتصال مستقل شبکه اِتر (Aether Standalone)
+  Future<void> _toggleAetherConnection() async {
+    try {
+      if (Platform.isWindows) {
+        if (_isAetherRunning || _isAetherConnecting) {
+          _aetherProgressTimer?.cancel();
+          final msg = await stopAetherCore();
+          setState(() {
+            _isAetherRunning = false;
+            _isAetherConnecting = false;
+            _aetherProgressPercent = 0;
+            _aetherStatusText = "اتصال قطع شد.";
+            _statusMessage = msg;
+            _resetIpInfo();
+          });
+        } else {
+          if (_isHybridRunning) {
+            await stopHybridConnection();
+            setState(() => _isHybridRunning = false);
+          }
+          if (_isProxyRunning) {
+            await stopProxyCore();
+            setState(() => _isProxyRunning = false);
+          }
+          if (_isTorRunning) {
+            await stopTorCore();
+            setState(() => _isTorRunning = false);
+          }
+          if (_isPsiphonRunning) {
+            await stopPsiphonCore();
+            setState(() => _isPsiphonRunning = false);
+          }
+
+          setState(() {
+            _isAetherConnecting = true;
+            _aetherProgressPercent = 25;
+            _aetherStatusText = "در حال اسکن و آزمایش خودکار پروتکل‌های ضدسانسور...";
+            _statusMessage = "اتصال به شبکه اتر آغاز شد...";
+          });
+
+          await startAetherCore(
+            binaryPath: _aetherPathController.text.trim(),
+            mode: _selectedAetherMode,
+            noize: _selectedAetherNoize,
+            warpKey: _aetherWarpKeyController.text.trim().isEmpty ? null : _aetherWarpKeyController.text.trim(),
+            team: _aetherTeamController.text.trim().isEmpty ? null : _aetherTeamController.text.trim(),
+            useSystemProxy: _useSystemProxy,
+          );
+
+          _aetherProgressTimer?.cancel();
+          _aetherProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+            if (!_isAetherConnecting) {
+              timer.cancel();
+              return;
+            }
+
+            final percent = await getAetherBootstrapProgress();
+            final isDone = await isAetherBootstrapDone();
+            final statusTxt = await getAetherStatusText();
+
+            setState(() {
+              _aetherProgressPercent = percent;
+              if (statusTxt.isNotEmpty) {
+                _aetherStatusText = statusTxt;
+              }
+            });
+
+            if (isDone || percent >= 100) {
+              timer.cancel();
+              setState(() {
+                _isAetherRunning = true;
+                _isAetherConnecting = false;
+                _aetherProgressPercent = 100;
+                _aetherStatusText = "اتصال پایدار شد! پورت 1820 و 1819 فعال است.";
+                _statusMessage = "شبکه اتر با موفقیت متصل شد.";
+              });
+              _fetchIpInfo();
+            }
+          });
+        }
+      } else if (Platform.isAndroid) {
+        setState(() => _statusMessage = "شبکه اتر در پلتفرم اندروید در دست توسعه است.");
+      }
+    } catch (e) {
+      _aetherProgressTimer?.cancel();
+      setState(() {
+        _isAetherConnecting = false;
+        _isAetherRunning = false;
+        _aetherProgressPercent = 0;
+        _statusMessage = "خطا در اتصال اتر: ${e.toString()}";
+      });
+    }
+  }
+
+  // اتصال تور
   Future<void> _toggleTorConnection() async {
     try {
       if (Platform.isWindows) {
-        // الف) سناریوی سیستم‌عامل ویندوز دسکتاپ
         if (_isTorRunning || _isTorConnecting) {
           _torProgressTimer?.cancel();
           final msg = await stopTorCore();
@@ -1514,21 +1930,24 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             _resetIpInfo();
           });
         } else {
-          if (_isProxyRunning) {
-            await stopProxyCore();
-            setState(() => _isProxyRunning = false);
-          }
-          if (_isPsiphonRunning) {
-            await stopPsiphonCore();
-            setState(() => _isPsiphonRunning = false);
-          }
+          if (_isHybridRunning) await stopHybridConnection();
+          if (_isProxyRunning) await stopProxyCore();
+          if (_isAetherRunning || _isAetherConnecting) await stopAetherCore();
+          if (_isPsiphonRunning) await stopPsiphonCore();
+
+          setState(() {
+            _isHybridRunning = false;
+            _isProxyRunning = false;
+            _isAetherRunning = false;
+            _isPsiphonRunning = false;
+          });
 
           final countryCode = _torCountries[_selectedTorCountry] ?? "";
           
           setState(() {
             _isTorConnecting = true;
             _torProgressPercent = 0;
-            _statusMessage = "در حال اجرای هسته تور؛ پایش خروجی شبکه پیاز آغاز شد...";
+            _statusMessage = "در حال اجرای هسته تور...";
           });
           
           await startTorCore(
@@ -1547,7 +1966,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             final percent = await getTorBootstrapProgress();
             setState(() {
               _torProgressPercent = percent;
-              _statusMessage = "پیشرفت اتصال پیاز تور: $percent٪";
+              _statusMessage = "پیشرفت اتصال تور: $percent٪";
             });
 
             if (percent >= 100) {
@@ -1555,17 +1974,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
               setState(() {
                 _isTorRunning = true;
                 _isTorConnecting = false;
-                _statusMessage = "اتصال به شبکه تور ۱۰۰٪ پایدار شد!";
+                _statusMessage = "اتصال به تور برقرار شد!";
               });
               _fetchIpInfo(); 
             }
           });
         }
       } else if (Platform.isAndroid) {
-        // ب) سناریوی سیستم‌عامل بومی اندروید گوشی برای تور
-        setState(() {
-          _statusMessage = "شبکه تور در پلتفرم اندروید در دست توسعه است.";
-        });
+        setState(() => _statusMessage = "تور در اندروید در دست توسعه است.");
       }
     } catch (e) {
       _torProgressTimer?.cancel();
@@ -1578,7 +1994,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // ۳. متد اتصال اختصاصی و هوشمند شبکه سایفون دسکتاپ با پایش پیشرفت واقعی
+  // اتصال سایفون
   Future<void> _togglePsiphonConnection() async {
     try {
       if (Platform.isWindows) {
@@ -1592,33 +2008,31 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             _resetIpInfo();
           });
         } else {
-          // تداخل‌سنجی هوشمند: خاموش کردن بقیه پورت‌های متداخل
-          if (_isProxyRunning) {
-            await stopProxyCore();
+          if (_isHybridRunning) await stopHybridConnection();
+          if (_isProxyRunning) await stopProxyCore();
+          if (_isAetherRunning) await stopAetherCore();
+          if (_isTorRunning) await stopTorCore();
+
+          setState(() {
+            _isHybridRunning = false;
             _isProxyRunning = false;
-          }
-          if (_isTorRunning || _isTorConnecting) {
-            _torProgressTimer?.cancel();
-            await stopTorCore();
+            _isAetherRunning = false;
             _isTorRunning = false;
-            _isTorConnecting = false;
-            _torProgressPercent = 0;
-          }
+          });
 
           final countryCode = _psiphonCountries[_selectedPsiphonCountry] ?? "";
           
           setState(() {
             _isPsiphonConnecting = true;
-            _statusMessage = "در حال اتصال به هسته سایفون و ثبت مدار...";
+            _statusMessage = "در حال اتصال به هسته سایفون...";
           });
 
-          final msg = await startPsiphonCore( // فراخوانی بومی به صورت شتری
+          final msg = await startPsiphonCore(
             binaryPath: _psiphonPathController.text,
             countryCode: countryCode,
             useSystemProxy: _useSystemProxy,
           );
 
-          // راه‌اندازی تایمر پایش برای استعلام تایید نهایی اتصال واقعی سایفون از راست
           _psiphonProgressTimer?.cancel();
           _psiphonProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
             if (!_isPsiphonConnecting) {
@@ -1632,14 +2046,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
               setState(() {
                 _isPsiphonRunning = true;
                 _isPsiphonConnecting = false;
-                _statusMessage = "اتصال با موفقیت به شبکه سایفون برقرار شد!";
+                _statusMessage = msg;
               });
-              _fetchIpInfo(); // استعلام پرچم و موقعیت آی‌پی سایفون
+              _fetchIpInfo();
             }
           });
         }
       } else if (Platform.isAndroid) {
-        setState(() => _statusMessage = "سایفون در پلتفرم اندروید در دست توسعه است.");
+        setState(() => _statusMessage = "سایفون در اندروید در دست توسعه است.");
       }
     } catch (e) {
       _psiphonProgressTimer?.cancel();
@@ -1651,7 +2065,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     }
   }
 
-  // ۴. متد اعمال یا بازنشانی دی‌ان‌اس هوشمند روی کارت شبکه بومی ویندوز
+  // اعمال دی‌ان‌اس
   Future<void> _toggleDnsConnection() async {
     try {
       if (Platform.isWindows) {
@@ -1662,7 +2076,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             _statusMessage = msg;
           });
         } else {
-          setState(() => _statusMessage = "در حال اعمال تنظیمات دی‌ان‌اس روی کارت شبکه...");
+          setState(() => _statusMessage = "در حال اعمال دی‌ان‌اس...");
           
           final msg = await setSystemDns(
             primary: _selectedDns.primary,
@@ -1675,14 +2089,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
           });
         }
       } else if (Platform.isAndroid) {
-        setState(() {
-          _statusMessage = "تغییر دهنده دی‌ان‌اس در پلتفرم اندروید در دست توسعه است.";
-        });
+        setState(() => _statusMessage = "تغییر دهنده DNS در اندروید در دست توسعه است.");
       }
     } catch (e) {
       setState(() {
         _isDnsRunning = false;
-        _statusMessage = "خطا: $e \nمطمئن شوید برنامه را به عنوان Administrator اجرا کرده‌اید.";
+        _statusMessage = "خطا: $e (برنامه را با Administrator اجرا کنید)";
       });
     }
   }
@@ -1702,47 +2114,92 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       body: Row(
         children: [
           Container(
-            width: 240,
+            width: 260,
             color: const Color(0xFF151824),
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 14),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, // تراز ستون سایدبار
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.shield_rounded, color: Theme.of(context).colorScheme.primary, size: 28),
+                      child: Icon(Icons.shield_rounded, color: Theme.of(context).colorScheme.primary, size: 26),
                     ),
                     const SizedBox(width: 12),
                     const Text(
-                      'RedCloud', // تغییر برند و نام اصلی بالای سایدبار به RedCloud
+                      'RedCloud',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.2),
                     ),
                   ],
                 ),
-                const SizedBox(height: 48),
-                _buildSidebarItem(0, Icons.dashboard_rounded, 'داشبورد ویتوری'), // ویرایش نام زبانه به داشبورد
-                const SizedBox(height: 12),
-                _buildSidebarItem(1, Icons.tune_rounded, 'پیکربندی و سرورها'),
-                const SizedBox(height: 12),
-                _buildSidebarItem(2, Icons.blur_circular_rounded, 'شبکه پیاز تور (Tor)'),
-                const SizedBox(height: 12),
-                _buildSidebarItem(3, Icons.security_rounded, 'شبکه سایفون (Psiphon)'), // زبانه مستقل جدید سایفون
-                const SizedBox(height: 12),
-                _buildSidebarItem(4, Icons.radar_rounded, 'اسکنر کلودفلر'),
-                const SizedBox(height: 12),
-                _buildSidebarItem(5, Icons.dns_rounded, 'تغییر دهنده DNS'), // زبانه کاملاً مستقل دی‌ان‌اس
-                const SizedBox(height: 12),
-                _buildSidebarItem(6, Icons.settings_rounded, 'تنظیمات برنامه'),
+                const SizedBox(height: 20),
+                _buildSidebarItem(0, Icons.dashboard_rounded, 'داشبورد ویتوری'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(1, Icons.bolt_rounded, 'شبکه اِتر (MASQUE)'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(2, Icons.tune_rounded, 'پیکربندی و سرورها'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(3, Icons.blur_circular_rounded, 'شبکه پیاز تور (Tor)'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(4, Icons.security_rounded, 'شبکه سایفون (Psiphon)'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(5, Icons.radar_rounded, 'اسکنر کلودفلر'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(6, Icons.dns_rounded, 'تغییر دهنده DNS'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(7, Icons.settings_rounded, 'تنظیمات برنامه'),
+                const SizedBox(height: 5),
+                _buildSidebarItem(8, Icons.menu_book_rounded, 'راهنمای جامع کاربری'),
                 const Spacer(),
+
+                // بخش هوشمند آپدیت نرم‌افزار با افکت درخشش کریستالی
+                _buildUpdateCard(),
+                const SizedBox(height: 10),
+
+                // دکمه‌های حمایت مالی و تلگرام
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => openBrowserUrl(telegramChannelUrl),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF229ED9),
+                          side: BorderSide(color: const Color(0xFF229ED9).withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 14),
+                        label: const Text('تلگرام', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _openDonationDialog,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber.withValues(alpha: 0.15),
+                          foregroundColor: Colors.amberAccent,
+                          elevation: 0,
+                          side: BorderSide(color: Colors.amber.withValues(alpha: 0.4)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.favorite_rounded, size: 14, color: Colors.amberAccent),
+                        label: const Text('حمایت', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
                 const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Text('نسخه اسکنر ۲.۵', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  padding: EdgeInsets.only(left: 4.0),
+                  child: Text('نسخه ضدسانسور ۳.۵ (Hybrid)', style: TextStyle(color: Colors.grey, fontSize: 10)),
                 )
               ],
             ),
@@ -1758,36 +2215,131 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  Widget _buildSidebarItem(int index, IconData icon, String title) {
-    final isSelected = _selectedMenuIndex == index;
-    return InkWell(
-      onTap: () => setState(() => _selectedMenuIndex = index),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.grey[400], size: 20),
-            const SizedBox(width: 16),
-            // پیچیدن متن در ویجت Expanded برای محدود کردن عرض متن و جلوگیری از خطای سرریز
-            Expanded(
-              child: Text(
-                title,
-                overflow: TextOverflow.ellipsis, // قرار دادن سه نقطه در صورت بلند بودن متن
-                maxLines: 1,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[400],
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 13, // سایز فونت سایدبار را به ۱۳ تغییر دادیم تا شیک‌تر و منظم‌تر شود
+  Widget _buildUpdateCard() {
+    if (_hasUpdate && _pulseAnimation != null) {
+      return AnimatedBuilder(
+        animation: _pulseAnimation!,
+        builder: (context, child) {
+          return InkWell(
+            onTap: () => openBrowserUrl(_latestReleaseUrl),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6C5DD3), Color(0xFF00D2FF)],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00D2FF).withValues(alpha: _pulseAnimation!.value * 0.7),
+                    blurRadius: 16 * _pulseAnimation!.value,
+                    spreadRadius: 2 * _pulseAnimation!.value,
+                  )
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'آپدیت v$_latestVersion موجود است!',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.download_rounded, color: Colors.white, size: 16),
+                ],
               ),
             ),
+          );
+        },
+      );
+    }
+
+    return InkWell(
+      onTap: _isCheckingUpdate ? null : () => _checkForUpdates(showSnackbarIfNoUpdate: true),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sync_rounded, size: 14, color: _isCheckingUpdate ? Colors.amberAccent : Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  _isCheckingUpdate ? 'بررسی...' : 'بررسی آپدیت نرم‌افزار',
+                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+              ],
+            ),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF2DCA73),
+              ),
+            )
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(int index, IconData icon, String title) {
+    final isSelected = _selectedMenuIndex == index;
+    final isAether = index == 1;
+    final isHelp = index == 8;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedMenuIndex = index),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? (isAether ? const Color(0xFF00D2FF).withValues(alpha: 0.25) : Theme.of(context).colorScheme.primary) 
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: (isAether && !isSelected) 
+                ? Border.all(color: const Color(0xFF00D2FF).withValues(alpha: 0.3), width: 1)
+                : (isHelp && !isSelected ? Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 1) : null),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon, 
+                color: isSelected 
+                    ? (isAether ? const Color(0xFF00D2FF) : Colors.white) 
+                    : (isAether ? const Color(0xFF00D2FF) : (isHelp ? Colors.amberAccent : Colors.grey[400])), 
+                size: 19
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : (isHelp ? Colors.amberAccent : Colors.grey[400]),
+                    fontWeight: (isSelected || isAether || isHelp) ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1798,29 +2350,74 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       case 0:
         return _buildDashboardPage();
       case 1:
-        return _buildConfigPage();
+        return _buildAetherPage();
       case 2:
-        return _buildTorPage();
+        return _buildConfigPage();
       case 3:
-        return _buildPsiphonPage(); // بارگذاری زبانه سایفون
+        return _buildTorPage();
       case 4:
-        return _buildScannerPage();
+        return _buildPsiphonPage();
       case 5:
-        return _buildDnsPage(); // بارگذاری صفحه مستقل دی‌ان‌اس
+        return _buildScannerPage();
       case 6:
+        return _buildDnsPage();
+      case 7:
         return _buildSettingsPage();
+      case 8:
+        return _buildHelpPage();
+      case 9:
+        return _buildAntiDpiSettingsPage();
       default:
         return _buildDashboardPage();
     }
   }
 
   Widget _buildDashboardPage() {
+    final bool isAnyRunning = _isHybridRunning || _isProxyRunning;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('داشبورد ویتوری', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)), // ویرایش عنوان صفحه اصلی به داشبورد ویتوری
-        const Text('مدیریت وضعیت اتصال و کنترل پراکسی بومی سرورهای ویتوری', style: TextStyle(color: Colors.grey, fontSize: 13)),
-        const SizedBox(height: 40),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('داشبورد ویتوری و اتصال هیبریدی', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                Text('کنترل ترافیک با قابلیت زنجیره‌سازی خودکار از دل پل ضدسانسور اِتر', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151824),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _isHybridModeEnabled ? const Color(0xFF00D2FF).withValues(alpha: 0.4) : Colors.white10,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.hub_rounded, size: 18, color: _isHybridModeEnabled ? const Color(0xFF00D2FF) : Colors.grey),
+                  const SizedBox(width: 10),
+                  const Text('اتصال هیبریدی (Aether+VLESS):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _isHybridModeEnabled,
+                    activeThumbColor: const Color(0xFF00D2FF),
+                    onChanged: isAnyRunning ? null : (bool val) {
+                      setState(() {
+                        _isHybridModeEnabled = val;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 36),
         Expanded(
           child: Row(
             children: [
@@ -1834,40 +2431,50 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                         onTap: _toggleV2RayConnection,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
-                          width: 180,
-                          height: 180,
+                          width: 190,
+                          height: 190,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFF151824),
                             border: Border.all(
-                              color: _isProxyRunning ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withOpacity(0.5),
+                              color: isAnyRunning 
+                                  ? (_isHybridRunning ? const Color(0xFF00D2FF) : const Color(0xFF2DCA73)) 
+                                  : const Color(0xFF6C5DD3).withValues(alpha: 0.5),
                               width: 4,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: _isProxyRunning 
-                                    ? const Color(0xFF2DCA73).withOpacity(0.3) 
-                                    : const Color(0xFF6C5DD3).withOpacity(0.15),
+                                color: isAnyRunning 
+                                    ? (_isHybridRunning ? const Color(0xFF00D2FF).withValues(alpha: 0.35) : const Color(0xFF2DCA73).withValues(alpha: 0.3)) 
+                                    : const Color(0xFF6C5DD3).withValues(alpha: 0.15),
                                 blurRadius: 40,
                                 spreadRadius: 10,
                               )
                             ],
                           ),
                           child: Icon(
-                            Icons.power_settings_new_rounded,
+                            _isHybridRunning ? Icons.hub_rounded : Icons.power_settings_new_rounded,
                             size: 80,
-                            color: _isProxyRunning ? const Color(0xFF2DCA73) : Colors.grey[600],
+                            color: isAnyRunning 
+                                ? (_isHybridRunning ? const Color(0xFF00D2FF) : const Color(0xFF2DCA73)) 
+                                : Colors.grey[600],
                           ),
                         ),
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        _isProxyRunning ? 'متصل به ویتوری' : 'جهت اتصال ویتوری ضربه بزنید',
+                        _isHybridRunning 
+                            ? 'متصل به اتصال هیبریدی (پل اِتر + Sing-box)' 
+                            : _isProxyRunning 
+                                ? 'متصل به ویتوری مستقیم' 
+                                : (_isHybridModeEnabled ? 'جهت اتصال هیبریدی ضربه بزنید' : 'جهت اتصال ویتوری مستقیم ضربه بزنید'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 16, 
+                          fontSize: 15, 
                           fontWeight: FontWeight.bold,
-                          color: _isProxyRunning ? const Color(0xFF2DCA73) : Colors.grey[400]
+                          color: isAnyRunning 
+                              ? (_isHybridRunning ? const Color(0xFF00D2FF) : const Color(0xFF2DCA73)) 
+                              : Colors.grey[400]
                         ),
                       ),
                     ],
@@ -1883,24 +2490,21 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                     children: [
                       Row(
                         children: [
-                          Expanded(child: _buildStatCard('دانلود', _downloadSpeed, Icons.arrow_downward_rounded, Colors.blueAccent)), // دریافت و نمایش سرعت زنده دانلود واقعی
+                          Expanded(child: _buildStatCard('دانلود', _downloadSpeed, Icons.arrow_downward_rounded, Colors.blueAccent)),
                           const SizedBox(width: 16),
-                          Expanded(child: _buildStatCard('آپلود', _uploadSpeed, Icons.arrow_upward_rounded, Colors.orangeAccent)), // دریافت و نمایش سرعت زنده آپلود واقعی
+                          Expanded(child: _buildStatCard('آپلود', _uploadSpeed, Icons.arrow_upward_rounded, Colors.orangeAccent)),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF151824),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                      Material(
+                        color: const Color(0xFF151824),
+                        borderRadius: BorderRadius.circular(16),
                         child: SwitchListTile(
                           title: const Text('تنظیم اتوماتیک پروکسی سیستم‌عامل', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           subtitle: const Text('فعال‌سازی رجیستری ویندوز جهت عبور کل ترافیک سیستم', style: TextStyle(fontSize: 11, color: Colors.grey)),
                           value: _useSystemProxy,
-                          activeColor: const Color(0xFF6C5DD3),
-                          onChanged: _useTunMode ? null : (bool value) { // در صورت فعال بودن TUN، تنظیم پروکسی سیستم‌عامل غیرفعال می‌شود
+                          activeThumbColor: const Color(0xFF6C5DD3),
+                          onChanged: _useTunMode ? null : (bool value) {
                             setState(() {
                               _useSystemProxy = value;
                             });
@@ -1908,96 +2512,67 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // سوئیچ جدید نئونی برای فعال‌سازی کارت شبکه مجازی (TUN Mode)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF151824),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                      Material(
+                        color: const Color(0xFF151824),
+                        borderRadius: BorderRadius.circular(16),
                         child: SwitchListTile(
                           title: const Text('فعال‌سازی کارت شبکه مجازی (TUN Mode)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           subtitle: const Text('عبور ترافیک کل سیستم (حتی بازی‌ها و برنامه‌های بدون پروکسی)', style: TextStyle(fontSize: 11, color: Colors.grey)),
                           value: _useTunMode,
-                          activeColor: const Color(0xFF6C5DD3),
+                          activeThumbColor: const Color(0xFF6C5DD3),
                           onChanged: (bool value) {
                             setState(() {
                               _useTunMode = value;
                               if (value) {
-                                _useSystemProxy = false; // هنگام فعال‌سازی TUN، نیازی به ثبت پروکسی سیستم نیست
+                                _useSystemProxy = false;
                               }
                             });
                           },
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // پنل کشویی پیشرفته تنظیمات دور زدن فیلترینگ (Anti-DPI)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: const Color(0xFF151824),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)),
                         ),
-                        child: ExpansionTile(
-                          title: const Text('تنظیمات دور زدن فیلترینگ (Anti-DPI)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          subtitle: const Text('اعمال تکنیک‌های جعل SNI و قطعه‌بندی ترافیک', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          leading: const Icon(Icons.security_rounded, color: Colors.amberAccent, size: 20),
-                          shape: const Border(), // حذف حاشیه پیش‌فرض ExpansionTile
-                          childrenPadding: const EdgeInsets.only(bottom: 16, left: 8, right: 8),
+                        child: Row(
                           children: [
-                            const SizedBox(height: 8),
-                            // ۱. فیلد ورودی Custom SNI
-                            TextField(
-                              controller: _customSniController,
-                              style: const TextStyle(fontSize: 13),
-                              decoration: const InputDecoration(
-                                labelText: 'SNI سفارشی (مثلاً: www.microsoft.com)',
-                                hintStyle: TextStyle(color: Colors.white24),
-                                hintText: 'خالی بگذارید تا از SNI پیش‌فرض استفاده شود',
-                                border: OutlineInputBorder(),
-                                isDense: true,
+                            const CircleAvatar(
+                              backgroundColor: Colors.amberAccent,
+                              child: Icon(Icons.security_rounded, color: Color(0xFF151824), size: 20),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'تنظیمات پیشرفته ضدسانسور (Anti-DPI)',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'جعل اثر انگشت مرورگر، فرگمنت ترافیک و تزریق اس‌ان‌آی فیک',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            
-                            // ۲. فیلد ورودی TLS Spoof
-                            TextField(
-                              controller: _tlsSpoofController,
-                              style: const TextStyle(fontSize: 13),
-                              decoration: const InputDecoration(
-                                labelText: 'SNI جعلی برای TLS Spoof (ویژه sing-box 1.14+)',
-                                hintStyle: TextStyle(color: Colors.white24),
-                                hintText: 'تزریق ClientHelloی فیک برای فریب DPI (مثلاً: zoom.us)',
-                                border: OutlineInputBorder(),
-                                isDense: true,
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedMenuIndex = 9;
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // ۳. کلیدهای فعال‌سازی Fragmentation
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('فعال‌سازی قطعه‌بندی (TLS Fragmentation)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              subtitle: const Text('تکه‌تکه کردن پکت ClientHello برای عبور از سد فیلترینگ', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              value: _enableFragment,
-                              activeColor: const Color(0xFF6C5DD3),
-                              onChanged: (bool value) {
-                                setState(() {
-                                    _enableFragment = value;
-                                });
-                              },
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('فعال‌سازی Record Fragmentation', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                              subtitle: const Text('تکه‌تکه کردن داده‌ها در سطح رکورد TLS جهت پایداری بیشتر', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              value: _enableRecordFragment,
-                              activeColor: const Color(0xFF6C5DD3),
-                              onChanged: (bool value) {
-                                setState(() {
-                                  _enableRecordFragment = value;
-                                });
-                              },
+                              child: const Text('پیکربندی', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -2022,10 +2597,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('سرور فعال برای اتصال', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  const Text('سرور فعال برای خروجی ویتوری', style: TextStyle(color: Colors.grey, fontSize: 12)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    _selectedNode?.name ?? "سروری انتخاب نشده است", 
+                                    _selectedNode?.name ?? "سرور خودکار (دریافت اتوماتیک از گیت‌هاب)", 
                                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -2067,12 +2642,690 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
+  Widget _buildAetherPage() {
+    final bool isActive = _isAetherRunning;
+    final bool isLoading = _isAetherConnecting;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00D2FF).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF00D2FF).withValues(alpha: 0.4)),
+              ),
+              child: const Text('پروتکل نسل جدید MASQUE', style: TextStyle(color: Color(0xFF00D2FF), fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text('شبکه ضدسانسور اِتر (Aether Engine)', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+        const Text('اتصال مستقیم و مقاوم به شبکه Cloudflare Zero Trust بر بستر HTTP/3 QUIC بدون نیاز به دامنه شخصی', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const SizedBox(height: 36),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: _toggleAetherConnection,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 190,
+                          height: 190,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF151824),
+                            border: Border.all(
+                              color: (isActive || isLoading) ? const Color(0xFF00D2FF) : const Color(0xFF6C5DD3).withValues(alpha: 0.5),
+                              width: 4,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (isActive || isLoading)
+                                    ? const Color(0xFF00D2FF).withValues(alpha: 0.35) 
+                                    : const Color(0xFF6C5DD3).withValues(alpha: 0.15),
+                                blurRadius: 45,
+                                spreadRadius: 12,
+                              )
+                            ],
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                Icons.bolt_rounded,
+                                size: 85,
+                                color: (isActive || isLoading) ? const Color(0xFF00D2FF) : Colors.grey[600],
+                              ),
+                              if (isLoading)
+                                SizedBox(
+                                  width: 150,
+                                  height: 150,
+                                  child: CircularProgressIndicator(
+                                    value: _aetherProgressPercent > 0 ? _aetherProgressPercent / 100.0 : null,
+                                    strokeWidth: 4,
+                                    color: const Color(0xFF00D2FF),
+                                    backgroundColor: Colors.white10,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        isActive 
+                            ? 'متصل به شبکه اِتر (MASQUE)' 
+                            : isLoading 
+                                ? 'در حال اسکن و تایید عبور داده: $_aetherProgressPercent٪' 
+                                : 'جهت اتصال به شبکه اِتر ضربه بزنید',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16, 
+                          fontWeight: FontWeight.bold,
+                          color: (isActive || isLoading) ? const Color(0xFF00D2FF) : Colors.grey[400]
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 5,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF151824),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF00D2FF).withValues(alpha: 0.2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.tune_rounded, color: Color(0xFF00D2FF), size: 18),
+                                SizedBox(width: 10),
+                                Text('حالت پروتکل ضدسانسور (Mode):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButton<String>(
+                              value: _selectedAetherMode,
+                              isExpanded: true,
+                              dropdownColor: const Color(0xFF151824),
+                              underline: const SizedBox(),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                              onChanged: isActive || isLoading ? null : (String? newValue) {
+                                if (newValue != null) {
+                                  setState(() {
+                                    _selectedAetherMode = newValue;
+                                    _statusMessage = "حالت پروتکل اتر به ${_aetherModes[newValue]} تغییر کرد.";
+                                  });
+                                }
+                              },
+                              items: _aetherModes.entries.map((entry) {
+                                return DropdownMenuItem<String>(
+                                  value: entry.key,
+                                  child: Text(entry.value),
+                                );
+                              }).toList(),
+                            ),
+                            const Divider(color: Colors.white10, height: 20),
+                            
+                            const Row(
+                              children: [
+                                Icon(Icons.waves_rounded, color: Color(0xFF00D2FF), size: 18),
+                                SizedBox(width: 10),
+                                Text('پروفایل پارازیت ضد DPI (Noize):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButton<String>(
+                              value: _selectedAetherNoize,
+                              isExpanded: true,
+                              dropdownColor: const Color(0xFF151824),
+                              underline: const SizedBox(),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                              onChanged: isActive || isLoading ? null : (String? val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedAetherNoize = val;
+                                  });
+                                  _saveAntiDpiToDisk();
+                                }
+                              },
+                              items: _aetherNoizeProfiles.entries.map((entry) {
+                                return DropdownMenuItem<String>(
+                                  value: entry.key,
+                                  child: Text(entry.value),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF151824),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: ExpansionTile(
+                            title: const Text('تنظیمات پیشرفته (اکانت WARP+ و Zero Trust)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            leading: const Icon(Icons.vpn_key_rounded, color: Colors.amberAccent, size: 18),
+                            childrenPadding: const EdgeInsets.all(16),
+                            children: [
+                              TextField(
+                                controller: _aetherWarpKeyController,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: const InputDecoration(
+                                  labelText: 'کلید لایسنس WARP+ (اختیاری)',
+                                  hintText: 'لایسنس ۲۴ کاراکتری وارپ پلاس',
+                                  hintStyle: TextStyle(color: Colors.white24, fontSize: 11),
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => _saveAntiDpiToDisk(),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _aetherTeamController,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: const InputDecoration(
+                                  labelText: 'نام سازمان یا توکن Team کلودفلر (اختیاری)',
+                                  hintText: 'مثلاً myteam.cloudflarewarp.com',
+                                  hintStyle: TextStyle(color: Colors.white24, fontSize: 11),
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => _saveAntiDpiToDisk(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Material(
+                        color: const Color(0xFF151824),
+                        borderRadius: BorderRadius.circular(16),
+                        child: SwitchListTile(
+                          title: const Text('تنظیم اتوماتیک پروکسی سیستم‌عامل (HTTP 1820 & SOCKS 1819)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('هدایت خودکار ترافیک کروم و ویندوز به درگاه Aether', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          value: _useSystemProxy,
+                          activeThumbColor: const Color(0xFF00D2FF),
+                          onChanged: isActive || isLoading ? null : (bool value) {
+                            setState(() {
+                              _useSystemProxy = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildLocationCard(), 
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF151824),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF00D2FF)),
+                                SizedBox(width: 8),
+                                Text('وضعیت زنده اسکنر Data-Plane اتر:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _aetherStatusText, 
+                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHelpPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amberAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.menu_book_rounded, color: Colors.amberAccent, size: 24),
+            ),
+            const SizedBox(width: 14),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('راهنمای جامع کاربری و ترفندهای RedCloud', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text('آموزش گام‌به‌گام تمامی ابزارها، پروتکل‌ها و تکنیک‌های دور زدن فیلترینگ', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(
+              children: [
+                _buildHelpAccordion(
+                  title: '۱. داشبورد و حالت اتصال هیبریدی (پیشنهاد اصلی)',
+                  icon: Icons.hub_rounded,
+                  iconColor: const Color(0xFF00D2FF),
+                  content: '''
+• اتصال هیبریدی (Aether + VLESS):
+این حالت پیشرفته‌ترین متد ضدسانسور برنامه است. در این حالت ترافیک شما ابتدا از پل فوق‌العاده پایدار اتر (MASQUE) رد شده و سپس وارد هسته ویتوری (Sing-box) می‌شود. با این کار فیلترینگ متوجه هویت ترافیک شما نمی‌شود و سرعت آپلود و دانلود بسیار پایداری خواهید داشت.
+
+• ویتوری مستقیم (Direct):
+اگر سوییچ اتصال هیبریدی را خاموش کنید، برنامه مستقیماً با سرور انتخابی شما در تب پیکربندی ارتباط برقرار می‌کند.
+
+• چرخش خودکار اکانت‌ها (Auto-Rotation):
+در صورتی که حجم ۵ گیگابایتی اکانت اشتراکی فعال تمام شود، برنامه بدون نیاز به دخالت شما به‌طور خودکار اکانت تازه از سرور گیت‌هاب دریافت کرده و ترافیک را متصل نگه می‌دارد.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۲. تفاوت کارت شبکه مجازی (TUN Mode) و پروکسی سیستم',
+                  icon: Icons.alt_route_rounded,
+                  iconColor: Colors.greenAccent,
+                  content: '''
+• حالت پروکسی سیستم‌عامل (System Proxy):
+این گزینه رجیستری ویندوز را تنظیم می‌کند تا ترافیک تمام مرورگرها (کروم، فایرفاکس، ادج) و نرم‌افزارهایی مثل تلگرام به‌طور خودکار از فیلترشکن عبور کنند.
+
+• کارت شبکه مجازی (TUN Mode):
+یک کارت شبکه مجازی روی ویندوز می‌سازد و کل ترافیک اینترنت رایانه شما (شامل بازی‌های آنلاین، برنامه‌های بدون قابلیت پروکسی، CMD، گیت و کلاینت‌های دسکتاپ) را بدون استثنا از تونل عبور می‌دهد. برای گیمینگ و جلوگیری از هرگونه نشت DNS و WebRTC این گزینه پیشنهاد می‌شود.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۳. شبکه ضدسانسور اِتر (MASQUE Aether Engine)',
+                  icon: Icons.bolt_rounded,
+                  iconColor: const Color(0xFF00D2FF),
+                  content: '''
+این تب به شما امکان اتصال مستقل به شبکه Zero Trust کلودفلر را بدون نیاز به هیچ کانفیگ، دامنه یا سرور خارجی می‌دهد!
+
+• حالت خودکار (Auto Failover):
+بهترین حالت پیشنهادی است که پروتکل‌های مختلف را به‌صورت زنده تست کرده و روی پایدارترین مسیر قفل می‌شود.
+
+• حالت MASQUE H3 (QUIC):
+پرسرعت‌ترین حالت ممکن بر بستر HTTP/3 که بدون تاخیر دست‌دهی اولیه (0-RTT) استریم‌های 4K و وب‌گردی پرسرعت را فراهم می‌کند.
+
+• حالت MASQUE H2 + Fragment:
+مناسب زمان‌هایی که اینترنت اپراتورها ترافیک UDP را به‌شدت محدود یا مختل کرده‌اند.
+
+• تنظیمات پارازیت (Noize):
+گزینه Firewall برای مقاومت در برابر فیلترینگ شدید و گزینه Light برای حداکثر سرعت و حداقل پینگ کاربرد دارد.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۴. پیکربندی و مدیریت سرورها (VLESS / Reality / Hysteria 2)',
+                  icon: Icons.tune_rounded,
+                  iconColor: Theme.of(context).colorScheme.primary,
+                  content: '''
+• وارد کردن کانفیگ یا سابسکریپشن:
+کافیست لینک ساب (https://) یا لینک‌های تک‌کانفیگ (vless://، hysteria2://، hy2://، trojan://) یا متن Base64 را در کادر بالای این تب قرار دهید و دکمه «وارد کردن» را بزنید.
+
+• تست پینگ دسته‌جمعی و مرتب‌سازی:
+با زدن دکمه «پینگ دسته‌جمعی و مرتب‌سازی»، هسته باینری راست تمام سرورها را به‌طور موازی در کمتر از ۲ ثانیه پایش کرده و سرورهای سالم و پرسرعت را به صدر لیست می‌آورد.
+
+• ویرایش دستی و فعال‌سازی Reality و ECH:
+با کلیک روی آیکون مداد هر سرور، می‌توانید پارامترهای پیشرفته مثل کلید عمومی Reality (pbk)، شناسه (sid)، مسیر (Path) و هدرهای ECH را ویرایش و ذخیره کنید.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۵. شبکه‌های پیاز تور (Tor) و سایفون (Psiphon)',
+                  icon: Icons.blur_circular_rounded,
+                  iconColor: Colors.purpleAccent,
+                  content: '''
+• شبکه پیاز تور (Tor):
+حداکثر امنیت و گمنامی در دنیای اینترنت. شما می‌توانید کشور خروجی (Exit Node) را انتخاب کنید تا هویت اینترنتی شما به آن کشور تغییر کند.
+
+• شبکه سایفون (Psiphon):
+یک ابزار قدرتمند جایگزین که با تکنولوژی هوشمند خود حتی در سخت‌ترین شرایط قطعی شبکه، توانایی باز کردن وب‌سایت‌ها را دارد.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۶. اسکنر موازی کلودفلر (IP Scanner)',
+                  icon: Icons.radar_rounded,
+                  iconColor: Colors.amberAccent,
+                  content: '''
+سیستم فیلترینگ برخی از آی‌پی‌های سرورهای کلودفلر را مسدود یا کند می‌کند. با رفتن به تب اسکنر کلودفلر:
+۱. روی دکمه «دریافت اکانت‌های رندوم» بزنید تا اطلاعات یک اکانت فعال از گیت‌هاب بارگذاری شود.
+۲. روی «شروع اسکن کلودفلر» کلیک کنید.
+اسکنر با ارسال بسته‌های موازی TCP و TLS Handshake، تمیزترین و سریع‌ترین آی‌پی‌های بدون فیلتر را برای شما استخراج کرده و به لیست سرورها اضافه می‌کند.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۷. تغییر دهنده هوشمند دی‌ان‌اس (DNS Changer)',
+                  icon: Icons.dns_rounded,
+                  iconColor: Colors.blueAccent,
+                  content: '''
+این تب به شما اجازه می‌دهد بدون روشن کردن فیلترشکن، تحریم‌های اینترنتی علیه کاربران ایرانی (مثل سایت‌های هوش مصنوعی، دیسکورد، اپیک گیمز، ادوبی، داکر و بازی‌های آنلاین) را دور بزنید!
+دی‌ان‌اس‌های معروف مانند شکن، الکترو، ۴۰۳ آنلاین، رادار گیم و همچنین DNSهای فوق امن رمزنگاری‌شده DoH (کلودفلر، نکست‌دی‌ان‌اس و ادگارد) در این تب آماده انتخاب هستند.
+''',
+                ),
+                _buildHelpAccordion(
+                  title: '۸. تنظیمات فوق‌پیشرفته ضدسانسور (Anti-DPI)',
+                  icon: Icons.security_rounded,
+                  iconColor: Colors.redAccent,
+                  content: '''
+• شبیه‌ساز اثر انگشت (uTLS Fingerprint):
+دست‌دهی کلاینت شما را کاملاً شبیه مرورگر گوگل کروم واقعی نشان می‌دهد تا فیلترینگ نتواند ترافیک نرم‌افزار را از وب‌گردی عادی تفکیک کند.
+
+• قطعه‌بندی پکت‌ها (TLS Fragmentation):
+پکت ClientHello حاوی نام دامنه (SNI) را به قطعات چند بایتی خرد می‌کند تا سیستم فیلترینگ DPI نتواند مقصد شما را بخواند و مسدود کند.
+
+• جعل تزریقی دامنه (TLS Spoofing):
+قبل از ارسال درخواست اصلی، یک پکت فیک با دامنه کاملاً باز و مجاز (مانند zoom.us یا microsoft.com) ارسال می‌کند تا حسگرهای فیلترینگ دور بخورند.
+''',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHelpAccordion({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required String content,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151824),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+          childrenPadding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F111A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                content.trim(),
+                style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.8),
+                textAlign: TextAlign.justify,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAntiDpiSettingsPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('تنظیمات فوق پیشرفته ضدسانسور (Anti-DPI)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text(
+                  'تکنیک‌های جعل دست‌دهی TLS و قطعه‌بندی ترافیک',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey),
+              onPressed: () {
+                setState(() {
+                  _selectedMenuIndex = 0;
+                });
+              },
+            )
+          ],
+        ),
+        const SizedBox(height: 32),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151824),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('۱. شبیه‌ساز اثر انگشت مرورگر (uTLS Fingerprint)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'تغییر اثر انگشت امنیتی ClientHello به شکل مرورگرهای واقعی دسکتاپ',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F111A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _selectedUtlsFingerprint,
+                      isExpanded: true,
+                      dropdownColor: const Color(0xFF151824),
+                      underline: const SizedBox(),
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      onChanged: (String? val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedUtlsFingerprint = val;
+                          });
+                        }
+                      },
+                      items: [
+                        const DropdownMenuItem(value: 'chrome', child: Text('Google Chrome (پیشنهادی)')),
+                        const DropdownMenuItem(value: 'firefox', child: Text('Mozilla Firefox')),
+                        const DropdownMenuItem(value: 'safari', child: Text('Apple Safari')),
+                        const DropdownMenuItem(value: 'edge', child: Text('Microsoft Edge')),
+                        const DropdownMenuItem(value: 'randomized', child: Text('Randomized (تصادفی)')),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Colors.white12, height: 40),
+
+                  const Text('۲. قطعه‌بندی پکت‌های امنیتی (Fragmentation)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'خرد کردن پکت ClientHello برای ممانعت از خوانده شدن SNI توسط DPI',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('فعال‌سازی قطعه‌بندی (TLS Fragmentation)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('خرد کردن بسته سلام برای مهار تشخیص SNI', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      value: _enableFragment,
+                      activeThumbColor: const Color(0xFF6C5DD3),
+                      onChanged: (bool value) {
+                        setState(() {
+                          _enableFragment = value;
+                        });
+                      },
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('فعال‌سازی قطعه‌بندی رکوردها (TLS Record Fragmentation)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('تکه‌تکه کردن داده‌ها در لایه رکوردهای رمزنگاری', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      value: _enableRecordFragment,
+                      activeThumbColor: const Color(0xFF6C5DD3),
+                      onChanged: (bool value) {
+                        setState(() {
+                          _enableRecordFragment = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _fallbackDelayController,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'تاخیر زمانی فالبک قطعه‌بندی (fallback delay)',
+                      hintText: 'مثلاً 500ms یا 100ms',
+                      hintStyle: TextStyle(color: Colors.white24, fontSize: 11),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const Divider(color: Colors.white12, height: 40),
+
+                  const Text('۳. جعل تزریقی اس‌ان‌آی (TLS Spoofing)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'تزریق هدر سلام فیک با دامنه مجاز (مانند zoom.us) پیش از پکت اصلی',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('فعال‌سازی سیستم جعل تزریقی SNI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      subtitle: const Text('دور زدن DPI با ارسال اس‌ان‌آی فیک مجاز', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      value: _enableTlsSpoof,
+                      activeThumbColor: const Color(0xFF6C5DD3),
+                      onChanged: (bool value) {
+                        setState(() {
+                          _enableTlsSpoof = value;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_enableTlsSpoof) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _tlsSpoofController,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        labelText: 'نام دامنه مجاز (مانند zoom.us یا microsoft.com)',
+                        hintText: 'دامنه‌ای که در فیلترینگ کاملاً باز باشد',
+                        hintStyle: TextStyle(color: Colors.white24, fontSize: 11),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 48),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        await _saveAntiDpiToDisk();
+                        scaffoldMessenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('تنظیمات پیشرفته Anti-DPI با موفقیت اعمال شد.'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        setState(() {
+                          _selectedMenuIndex = 0;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 12,
+                        shadowColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                      ),
+                      icon: const Icon(Icons.check_circle_rounded, color: Colors.white),
+                      label: const Text(
+                        'ثبت و اعمال تنظیمات ضدسانسور',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTorPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('شبکه پیاز تور (Tor Network)', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-        const Text('اتصال ایمن و گمنام به شبکه جهانی تور همراه با قابلیت تغییر داینامیک کشور خروجی', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const Text('اتصال ایمن و گمنام به شبکه جهانی تور همراه با قابلیت تغییر کشور خروجی', style: TextStyle(color: Colors.grey, fontSize: 13)),
         const SizedBox(height: 40),
         Expanded(
           child: Row(
@@ -2081,7 +3334,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                 flex: 4,
                 child: Center(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center, // تراز وسط دکمه پاور تور
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       GestureDetector(
                         onTap: _toggleTorConnection,
@@ -2093,14 +3346,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                             shape: BoxShape.circle,
                             color: const Color(0xFF151824),
                             border: Border.all(
-                              color: (_isTorRunning || _isTorConnecting) ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withOpacity(0.5),
+                              color: (_isTorRunning || _isTorConnecting) ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withValues(alpha: 0.5),
                               width: 4,
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: (_isTorRunning || _isTorConnecting)
-                                    ? const Color(0xFF2DCA73).withOpacity(0.3) 
-                                    : const Color(0xFF6C5DD3).withOpacity(0.15),
+                                    ? const Color(0xFF2DCA73).withValues(alpha: 0.3) 
+                                    : const Color(0xFF6C5DD3).withValues(alpha: 0.15),
                                 blurRadius: 40,
                                 spreadRadius: 10,
                               )
@@ -2158,7 +3411,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       decoration: BoxDecoration(
                         color: const Color(0xFF151824),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+                        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2194,17 +3447,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF151824),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                    Material(
+                      color: const Color(0xFF151824),
+                      borderRadius: BorderRadius.circular(16),
                       child: SwitchListTile(
                         title: const Text('تنظیم اتوماتیک پروکسی سیستم‌عامل', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                         subtitle: const Text('فعال‌سازی رجیستری ویندوز جهت عبور کل ترافیک سیستم', style: TextStyle(fontSize: 11, color: Colors.grey)),
                         value: _useSystemProxy,
-                        activeColor: const Color(0xFF6C5DD3),
+                        activeThumbColor: const Color(0xFF6C5DD3),
                         onChanged: (bool value) {
                           setState(() {
                             _useSystemProxy = value;
@@ -2245,7 +3495,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  // صفحه مستقل جدید: شبکه سایفون (Psiphon Network Page)
   Widget _buildPsiphonPage() {
     final bool isPsiphonActive = _isPsiphonRunning;
     final bool isPsiphonLoading = _isPsiphonConnecting;
@@ -2253,12 +3502,11 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('شبکه سایفون (Psiphon Network)', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-        const Text('اتصال آسان به فیلترشکن سایفون همراه با امکان انتخاب داینامیک کشور خروجی', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const Text('اتصال آسان به فیلترشکن سایفون همراه با انتخاب کشور خروجی', style: TextStyle(color: Colors.grey, fontSize: 13)),
         const SizedBox(height: 40),
         Expanded(
           child: Row(
             children: [
-              // دکمه پاور اختصاصی نئونی سایفون به همراه دکره لودینگ متحرک پیشرفت واقعی
               Expanded(
                 flex: 4,
                 child: Center(
@@ -2275,14 +3523,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                             shape: BoxShape.circle,
                             color: const Color(0xFF151824),
                             border: Border.all(
-                              color: (isPsiphonActive || isPsiphonLoading) ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withOpacity(0.5),
+                              color: (isPsiphonActive || isPsiphonLoading) ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withValues(alpha: 0.5),
                               width: 4,
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: (isPsiphonActive || isPsiphonLoading)
-                                    ? const Color(0xFF2DCA73).withOpacity(0.3) 
-                                    : const Color(0xFF6C5DD3).withOpacity(0.15),
+                                    ? const Color(0xFF2DCA73).withValues(alpha: 0.3) 
+                                    : const Color(0xFF6C5DD3).withValues(alpha: 0.15),
                                 blurRadius: 40,
                                 spreadRadius: 10,
                               )
@@ -2292,7 +3540,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                             alignment: Alignment.center,
                             children: [
                               Icon(
-                                Icons.security_rounded, // آیکون سپر امنیتی سایفون
+                                Icons.security_rounded,
                                 size: 80,
                                 color: (isPsiphonActive || isPsiphonLoading) ? const Color(0xFF2DCA73) : Colors.grey[600],
                               ),
@@ -2334,13 +3582,12 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // دراپ‌داون انتخاب کشور خروجی سایفون (Exit Region)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       decoration: BoxDecoration(
                         color: const Color(0xFF151824),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+                        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2376,17 +3623,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF151824),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                    Material(
+                      color: const Color(0xFF151824),
+                      borderRadius: BorderRadius.circular(16),
                       child: SwitchListTile(
                         title: const Text('تنظیم اتوماتیک پروکسی سیستم‌عامل', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                         subtitle: const Text('فعال‌سازی رجیستری ویندوز جهت عبور کل ترافیک سیستم', style: TextStyle(fontSize: 11, color: Colors.grey)),
                         value: _useSystemProxy,
-                        activeColor: const Color(0xFF6C5DD3),
+                        activeThumbColor: const Color(0xFF6C5DD3),
                         onChanged: _isPsiphonRunning || _isPsiphonConnecting ? null : (bool value) {
                           setState(() {
                             _useSystemProxy = value;
@@ -2395,7 +3639,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _buildLocationCard(), // موقعیت آی‌پی سرور سایفون متصل شده
+                    _buildLocationCard(),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -2427,18 +3671,16 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  // صفحه مستقل پنجم: تغییر دهنده دی‌ان‌اس هوشمند (DNS Changer Page)
   Widget _buildDnsPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('تغییر دهنده هوشمند DNS', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-        const Text('اعمال دی‌ان‌اس‌های تحریم‌شکن داخلی و بین‌المللی با بررسی زنده پینگ و تاخیر شبکه', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const Text('اعمال دی‌ان‌اس‌های تحریم‌شکن با بررسی زنده پینگ و تاخیر شبکه', style: TextStyle(color: Colors.grey, fontSize: 13)),
         const SizedBox(height: 40),
         Expanded(
           child: Row(
             children: [
-              // دکمه پاور نئونی بزرگ مخصوص دی‌ان‌اس
               Expanded(
                 flex: 4,
                 child: Center(
@@ -2455,14 +3697,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                             shape: BoxShape.circle,
                             color: const Color(0xFF151824),
                             border: Border.all(
-                              color: _isDnsRunning ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withOpacity(0.5),
+                              color: _isDnsRunning ? const Color(0xFF2DCA73) : const Color(0xFF6C5DD3).withValues(alpha: 0.5),
                               width: 4,
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: _isDnsRunning 
-                                    ? const Color(0xFF2DCA73).withOpacity(0.3) 
-                                    : const Color(0xFF6C5DD3).withOpacity(0.15),
+                                    ? const Color(0xFF2DCA73).withValues(alpha: 0.3) 
+                                    : const Color(0xFF6C5DD3).withValues(alpha: 0.15),
                                 blurRadius: 40,
                                 spreadRadius: 10,
                               )
@@ -2496,7 +3738,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // بخش انتخاب دی‌ان‌اس به همراه دکمه شیک افزودن دی‌ان‌اس سفارشی جدید
                       Row(
                         children: [
                           Expanded(
@@ -2505,7 +3746,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                               decoration: BoxDecoration(
                                 color: const Color(0xFF151824),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+                                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2517,21 +3758,21 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                                       Text('انتخاب DNS:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                     ],
                                   ),
-                                  const SizedBox(width: 12), // فاصله مناسب بین متن عنوان و شروع منو
-                                  Expanded( // <--- اضافه شدن اکسپندد برای مهار و اجبار دراپ‌داون به بازه عرضی محلی
+                                  const SizedBox(width: 12),
+                                  Expanded(
                                     child: DropdownButton<DnsProfile>(
                                       value: _selectedDns,
-                                      isExpanded: true, // <--- اکسپند بومی دراپ‌داون برای هماهنگی با عرض جدید
+                                      isExpanded: true,
                                       dropdownColor: const Color(0xFF151824),
                                       underline: const SizedBox(),
                                       style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                      alignment: AlignmentDirectional.centerEnd, // راست‌چین کردن متن انتخابی برای هماهنگی بهتر
+                                      alignment: AlignmentDirectional.centerEnd,
                                       onChanged: _isDnsRunning ? null : (DnsProfile? newValue) {
                                         if (newValue != null) {
                                           setState(() {
                                             _selectedDns = newValue;
                                           });
-                                          _testDnsPing(); // پینگ گرفتن اتوماتیک به محض تغییر گزینش
+                                          _testDnsPing();
                                         }
                                       },
                                       items: _dnsList.map<DropdownMenuItem<DnsProfile>>((DnsProfile value) {
@@ -2539,7 +3780,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                                           value: value,
                                           child: Text(
                                             value.name,
-                                            overflow: TextOverflow.ellipsis, // قرار دادن سه نقطه (...) برای نام‌های فوق‌العاده طولانی جهت جلوگیری از سرریز
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         );
                                       }).toList(),
@@ -2564,7 +3805,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                       const SizedBox(height: 16),
                       
-                      // جزئیات آی‌پی‌ها و کارت سنجش پینگ پیشرفته
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -2585,7 +3825,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                  const Text('سرور ثانویه (Secondary):', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                const Text('سرور ثانویه (Secondary):', style: TextStyle(color: Colors.grey, fontSize: 12)),
                                 Text(_selectedDns.secondary, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -2650,7 +3890,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                       const SizedBox(height: 16),
                       
-                      // توضیحات کارکرد دی‌ان‌اس
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -2672,7 +3911,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                       ),
                       const SizedBox(height: 16),
 
-                      // دکمه حذف دائمی دی‌ان‌اس سفارشی در صورت کاستوم بودن
                       if (_selectedDns.isCustom) ...[
                         ElevatedButton.icon(
                           onPressed: _isDnsRunning ? null : () async {
@@ -2680,14 +3918,16 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                               _dnsList.remove(_selectedDns);
                               _selectedDns = _dnsList[0];
                             });
-                            await _saveDnsToDisk(); // به‌روزرسانی هارددیسک
+                            
+                            final scaffoldMessenger = ScaffoldMessenger.of(context);
+                            await _saveDnsToDisk();
                             _testDnsPing();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('دی‌ان‌اس سفارشی با موفقیت از سیستم حذف شد.')),
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(content: Text('دی‌ان‌اس سفارشی از سیستم حذف شد.')),
                             );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent.withOpacity(0.15),
+                            backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
                             foregroundColor: Colors.redAccent,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2729,7 +3969,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
   }
 
   Widget _buildLocationCard() {
-    final bool isAnyConnected = _isProxyRunning || _isTorRunning || _isPsiphonRunning;
+    final bool isAnyConnected = _isProxyRunning || _isHybridRunning || _isAetherRunning || _isTorRunning || _isPsiphonRunning;
     if (!isAnyConnected) return const SizedBox.shrink();
 
     return AnimatedContainer(
@@ -2739,7 +3979,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         color: const Color(0xFF151824),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
         ),
       ),
       child: _isLoadingIpInfo
@@ -2845,7 +4085,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: color.withOpacity(0.15),
+            backgroundColor: color.withValues(alpha: 0.15),
             child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 16),
@@ -2875,7 +4115,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
               child: TextField(
                 controller: _importController,
                 decoration: const InputDecoration(
-                  labelText: 'لینک ساب (https://) یا کانفیگ تکی (vless://...) یا کلید Base64',
+                  labelText: 'لینک ساب (https://) یا کانفیگ تکی (vless / hysteria2 / trojan) یا Base64',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.add_link_rounded),
                 ),
@@ -2896,7 +4136,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
         ),
         const SizedBox(height: 24),
         
-        // دکمه‌های کنترلی بالای جدول سرورها
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -2904,7 +4143,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             ElevatedButton.icon(
               onPressed: _isBulkPinging ? null : _bulkPingAndSort,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
                 foregroundColor: Theme.of(context).colorScheme.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2938,14 +4177,14 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                   child: ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _savedNodes.length,
-                    separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                    separatorBuilder: (_, index) => const Divider(color: Colors.white12),
                     itemBuilder: (context, index) {
                       final node = _savedNodes[index];
                       final isSelected = _selectedNode == node;
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: isSelected 
-                              ? Theme.of(context).colorScheme.secondary.withOpacity(0.15) 
+                              ? Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15)
                               : Colors.white10,
                           child: Text(
                             node.protocol[0].toUpperCase(),
@@ -2966,7 +4205,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // نمایش تأخیر پینگ زنده در صورت موجود بودن
                             if (_nodePings[node.rawUrl] != null) ...[
                               Text(
                                 _nodePings[node.rawUrl] == -1 ? "Timeout" : "${_nodePings[node.rawUrl]} ms",
@@ -2978,7 +4216,6 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                               ),
                               const SizedBox(width: 12),
                             ],
-                            // دکمه کپی لینک کانفیگ جهت اشتراک‌گذاری
                             IconButton(
                               icon: const Icon(Icons.share_rounded, size: 16, color: Colors.grey),
                               tooltip: 'اشتراک‌گذاری کانفیگ',
@@ -2989,13 +4226,11 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                                 );
                               },
                             ),
-                            // دکمه ویرایش دستی پارامترهای سرور
                             IconButton(
                               icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.grey),
                               tooltip: 'ویرایش پارامترها',
                               onPressed: () => _openEditDialog(node, index),
                             ),
-                            // دکمه حذف فیزیکی از رم و هارددیسک
                             IconButton(
                               icon: const Icon(Icons.delete_forever_rounded, size: 16, color: Colors.redAccent),
                               tooltip: 'حذف دائمی کانفیگ',
@@ -3006,8 +4241,10 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                                     _selectedNode = _savedNodes.isNotEmpty ? _savedNodes.first : null;
                                   }
                                 });
-                                await _saveNodesToDisk(); // آپدیت آنی فایل متنی روی هارددیسک
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                
+                                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                await _saveNodesToDisk();
+                                scaffoldMessenger.showSnackBar(
                                   const SnackBar(content: Text('سرور از حافظه حذف شد.')),
                                 );
                               },
@@ -3038,7 +4275,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('اسکنر موازی کلودفلر (IP Scanner)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const Text('تست دقیق TCP Ping و TLS Handshake با دامنه ورکر شما برای پیدا کردن آی‌پی‌های تمیز', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const Text('تست دقیق TCP Ping و TLS Handshake با دامنه ورکر', style: TextStyle(color: Colors.grey, fontSize: 13)),
         const SizedBox(height: 24),
         
         Container(
@@ -3083,7 +4320,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _githubAccounts.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, index) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
                       final acc = _githubAccounts[index];
                       final isSel = _selectedGithubAccount == acc;
@@ -3137,7 +4374,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
                         children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 16),
-                          Text('اسکنر در حال اتصال موازی به آی‌پی‌ها و ارزیابی دست‌دهی TLS است؛ لطفاً منتظر بمانید...', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text('اسکنر در حال ارزیابی دست‌دهی TLS است؛ لطفاً منتظر بمانید...', style: TextStyle(color: Colors.grey, fontSize: 12)),
                         ],
                       )
                     : ElevatedButton.icon(
@@ -3160,7 +4397,7 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
             padding: const EdgeInsets.all(16),
             width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFF151824).withOpacity(0.5),
+              color: const Color(0xFF151824).withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -3184,64 +4421,83 @@ class _MainLayoutState extends State<MainLayout> with WindowListener, TrayListen
     );
   }
 
-  // اضافه شدن فیلدهای جدید تور و سایفون در بخش تنظیمات برنامه
   Widget _buildSettingsPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('تنظیمات برنامه', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const Text('پیکربندی هسته سیستم و آدرس فایل‌های باینری', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        const Text('پیکربندی هسته‌های سیستم و مسیر فایل‌های باینری', style: TextStyle(color: Colors.grey, fontSize: 13)),
         const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF151824),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('تنظیمات آدرس هسته V2Ray', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _binaryPathController,
-                decoration: const InputDecoration(
-                  labelText: 'مسیر فایل هسته sing-box.exe (مثلا D:\\net\\client\\sing-box.exe)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.code_rounded),
-                ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151824),
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 24),
-              const Divider(color: Colors.white12),
-              const SizedBox(height: 16),
-              const Text('تنظیمات آدرس هسته تور (Tor)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _torPathController,
-                decoration: const InputDecoration(
-                  labelText: 'مسیر فایل هسته tor.exe (مثلا D:\\net\\client\\tor.exe)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.blur_circular_rounded),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('تنظیمات آدرس هسته شبکه اِتر (Aether MASQUE)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF00D2FF))),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aetherPathController,
+                    decoration: const InputDecoration(
+                      labelText: 'مسیر فایل هسته aether.exe (مثلا aether.exe یا C:\\Tools\\aether.exe)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.bolt_rounded, color: Color(0xFF00D2FF)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 16),
+
+                  const Text('تنظیمات آدرس هسته V2Ray (sing-box)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _binaryPathController,
+                    decoration: const InputDecoration(
+                      labelText: 'مسیر فایل هسته sing-box.exe',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.code_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 16),
+
+                  const Text('تنظیمات آدرس هسته تور (Tor)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _torPathController,
+                    decoration: const InputDecoration(
+                      labelText: 'مسیر فایل هسته tor.exe',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.blur_circular_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 16),
+
+                  const Text('تنظیمات آدرس هسته سایفون (Psiphon)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _psiphonPathController,
+                    decoration: const InputDecoration(
+                      labelText: 'مسیر فایل هسته psiphon-tunnel-core.exe',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.security_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(color: Colors.white12),
+                  const SizedBox(height: 16),
+                  const Text('سیستم‌عامل مقصد فعلی: Windows', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
               ),
-              const SizedBox(height: 24),
-              const Divider(color: Colors.white12),
-              const SizedBox(height: 16),
-              const Text('تنظیمات آدرس هسته سایفون (Psiphon)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _psiphonPathController,
-                decoration: const InputDecoration(
-                  labelText: 'مسیر فایل هسته psiphon-tunnel-core.exe (مثلا D:\\net\\client\\psiphon-tunnel-core.exe)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.security_rounded),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Divider(color: Colors.white12),
-              const SizedBox(height: 16),
-              const Text('سیستم‌عامل مقصد فعلی: Windows', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ],
+            ),
           ),
         ),
       ],

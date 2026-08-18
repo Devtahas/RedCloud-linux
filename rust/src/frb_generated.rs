@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1072710679;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1507789672;
 
 // Section: executor
 
@@ -46,6 +46,72 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__simple__get_aether_bootstrap_progress_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_aether_bootstrap_progress",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::simple::get_aether_bootstrap_progress())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__get_aether_status_text_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_aether_status_text",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::simple::get_aether_status_text())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__get_tor_bootstrap_progress_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -73,6 +139,71 @@ fn wire__crate__api__simple__get_tor_bootstrap_progress_impl(
                 transform_result_sse::<_, ()>((move || {
                     let output_ok =
                         Result::<_, ()>::Ok(crate::api::simple::get_tor_bootstrap_progress())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__is_aether_bootstrap_done_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_aether_bootstrap_done",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::simple::is_aether_bootstrap_done())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__is_aether_connected_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_aether_connected",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::simple::is_aether_connected())?;
                     Ok(output_ok)
                 })())
             }
@@ -137,6 +268,38 @@ fn wire__crate__api__simple__is_dns_active_impl(
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok = Result::<_, ()>::Ok(crate::api::simple::is_dns_active())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__is_hybrid_connected_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_hybrid_connected",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::simple::is_hybrid_connected())?;
                     Ok(output_ok)
                 })())
             }
@@ -447,6 +610,112 @@ fn wire__crate__api__simple__set_system_dns_impl(
         },
     )
 }
+fn wire__crate__api__simple__start_aether_core_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "start_aether_core",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_binary_path = <String>::sse_decode(&mut deserializer);
+            let api_mode = <String>::sse_decode(&mut deserializer);
+            let api_noize = <String>::sse_decode(&mut deserializer);
+            let api_warp_key = <Option<String>>::sse_decode(&mut deserializer);
+            let api_team = <Option<String>>::sse_decode(&mut deserializer);
+            let api_use_system_proxy = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::simple::start_aether_core(
+                        api_binary_path,
+                        api_mode,
+                        api_noize,
+                        api_warp_key,
+                        api_team,
+                        api_use_system_proxy,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__start_hybrid_connection_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "start_hybrid_connection",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_singbox_path = <String>::sse_decode(&mut deserializer);
+            let api_aether_path = <String>::sse_decode(&mut deserializer);
+            let api_selected_node = <crate::api::simple::ProxyNode>::sse_decode(&mut deserializer);
+            let api_aether_mode = <String>::sse_decode(&mut deserializer);
+            let api_aether_noize = <String>::sse_decode(&mut deserializer);
+            let api_aether_warp_key = <Option<String>>::sse_decode(&mut deserializer);
+            let api_aether_team = <Option<String>>::sse_decode(&mut deserializer);
+            let api_use_system_proxy = <bool>::sse_decode(&mut deserializer);
+            let api_use_tun_mode = <bool>::sse_decode(&mut deserializer);
+            let api_dns_type = <String>::sse_decode(&mut deserializer);
+            let api_dns_primary = <String>::sse_decode(&mut deserializer);
+            let api__dns_secondary = <String>::sse_decode(&mut deserializer);
+            let api_dns_dot_host = <Option<String>>::sse_decode(&mut deserializer);
+            let api__utls_fingerprint = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::simple::start_hybrid_connection(
+                        api_singbox_path,
+                        api_aether_path,
+                        api_selected_node,
+                        api_aether_mode,
+                        api_aether_noize,
+                        api_aether_warp_key,
+                        api_aether_team,
+                        api_use_system_proxy,
+                        api_use_tun_mode,
+                        api_dns_type,
+                        api_dns_primary,
+                        api__dns_secondary,
+                        api_dns_dot_host,
+                        api__utls_fingerprint,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__start_proxy_with_node_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -479,9 +748,11 @@ fn wire__crate__api__simple__start_proxy_with_node_impl(
             let api_use_tun_mode = <bool>::sse_decode(&mut deserializer);
             let api_dns_type = <String>::sse_decode(&mut deserializer);
             let api_dns_primary = <String>::sse_decode(&mut deserializer);
-            let api_dns_secondary = <String>::sse_decode(&mut deserializer);
-            let api_dns_doh_url = <Option<String>>::sse_decode(&mut deserializer);
+            let api__dns_secondary = <String>::sse_decode(&mut deserializer);
+            let api__dns_doh_url = <Option<String>>::sse_decode(&mut deserializer);
             let api_dns_dot_host = <Option<String>>::sse_decode(&mut deserializer);
+            let api_utls_fingerprint = <Option<String>>::sse_decode(&mut deserializer);
+            let api_fragment_fallback_delay = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -496,9 +767,11 @@ fn wire__crate__api__simple__start_proxy_with_node_impl(
                         api_use_tun_mode,
                         api_dns_type,
                         api_dns_primary,
-                        api_dns_secondary,
-                        api_dns_doh_url,
+                        api__dns_secondary,
+                        api__dns_doh_url,
                         api_dns_dot_host,
+                        api_utls_fingerprint,
+                        api_fragment_fallback_delay,
                     )?;
                     Ok(output_ok)
                 })())
@@ -578,6 +851,70 @@ fn wire__crate__api__simple__start_tor_core_impl(
                         api_country_code,
                         api_use_system_proxy,
                     )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__stop_aether_core_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "stop_aether_core",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::simple::stop_aether_core()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__stop_hybrid_connection_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "stop_hybrid_connection",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::simple::stop_hybrid_connection()?;
                     Ok(output_ok)
                 })())
             }
@@ -782,38 +1119,68 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__simple__get_tor_bootstrap_progress_impl(
+        1 => wire__crate__api__simple__get_aether_bootstrap_progress_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        2 => wire__crate__api__simple__is_connected_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__simple__is_dns_active_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__simple__is_psiphon_bootstrap_done_impl(
+        2 => {
+            wire__crate__api__simple__get_aether_status_text_impl(port, ptr, rust_vec_len, data_len)
+        }
+        3 => wire__crate__api__simple__get_tor_bootstrap_progress_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__simple__is_psiphon_connected_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__simple__is_tor_connected_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__simple__parse_import_links_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__simple__ping_dns_server_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__simple__ping_proxy_server_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__simple__reset_system_dns_impl(port, ptr, rust_vec_len, data_len),
-        11 => {
+        4 => wire__crate__api__simple__is_aether_bootstrap_done_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__simple__is_aether_connected_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__is_connected_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__is_dns_active_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__is_hybrid_connected_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__is_psiphon_bootstrap_done_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        10 => {
+            wire__crate__api__simple__is_psiphon_connected_impl(port, ptr, rust_vec_len, data_len)
+        }
+        11 => wire__crate__api__simple__is_tor_connected_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__simple__parse_import_links_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__simple__ping_dns_server_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__simple__ping_proxy_server_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__simple__reset_system_dns_impl(port, ptr, rust_vec_len, data_len),
+        16 => {
             wire__crate__api__simple__run_cloudflare_scanner_impl(port, ptr, rust_vec_len, data_len)
         }
-        12 => wire__crate__api__simple__set_system_dns_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
+        17 => wire__crate__api__simple__set_system_dns_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__simple__start_aether_core_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__simple__start_hybrid_connection_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        20 => {
             wire__crate__api__simple__start_proxy_with_node_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__simple__start_psiphon_core_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__simple__start_tor_core_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__simple__stop_proxy_core_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__simple__stop_psiphon_core_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__simple__stop_tor_core_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__simple__start_psiphon_core_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__simple__start_tor_core_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__simple__stop_aether_core_impl(port, ptr, rust_vec_len, data_len),
+        24 => {
+            wire__crate__api__simple__stop_hybrid_connection_impl(port, ptr, rust_vec_len, data_len)
+        }
+        25 => wire__crate__api__simple__stop_proxy_core_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__simple__stop_psiphon_core_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__simple__stop_tor_core_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

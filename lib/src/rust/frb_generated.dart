@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1072710679;
+  int get rustContentHash => 1507789672;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -76,11 +76,21 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<int> crateApiSimpleGetAetherBootstrapProgress();
+
+  Future<String> crateApiSimpleGetAetherStatusText();
+
   Future<int> crateApiSimpleGetTorBootstrapProgress();
+
+  Future<bool> crateApiSimpleIsAetherBootstrapDone();
+
+  Future<bool> crateApiSimpleIsAetherConnected();
 
   Future<bool> crateApiSimpleIsConnected();
 
   Future<bool> crateApiSimpleIsDnsActive();
+
+  Future<bool> crateApiSimpleIsHybridConnected();
 
   Future<bool> crateApiSimpleIsPsiphonBootstrapDone();
 
@@ -112,6 +122,32 @@ abstract class RustLibApi extends BaseApi {
     required String secondary,
   });
 
+  Future<String> crateApiSimpleStartAetherCore({
+    required String binaryPath,
+    required String mode,
+    required String noize,
+    String? warpKey,
+    String? team,
+    required bool useSystemProxy,
+  });
+
+  Future<String> crateApiSimpleStartHybridConnection({
+    required String singboxPath,
+    required String aetherPath,
+    required ProxyNode selectedNode,
+    required String aetherMode,
+    required String aetherNoize,
+    String? aetherWarpKey,
+    String? aetherTeam,
+    required bool useSystemProxy,
+    required bool useTunMode,
+    required String dnsType,
+    required String dnsPrimary,
+    required String dnsSecondary,
+    String? dnsDotHost,
+    String? utlsFingerprint,
+  });
+
   Future<String> crateApiSimpleStartProxyWithNode({
     required String binaryPath,
     required ProxyNode selectedNode,
@@ -126,6 +162,8 @@ abstract class RustLibApi extends BaseApi {
     required String dnsSecondary,
     String? dnsDohUrl,
     String? dnsDotHost,
+    String? utlsFingerprint,
+    String? fragmentFallbackDelay,
   });
 
   Future<String> crateApiSimpleStartPsiphonCore({
@@ -139,6 +177,10 @@ abstract class RustLibApi extends BaseApi {
     required String countryCode,
     required bool useSystemProxy,
   });
+
+  Future<String> crateApiSimpleStopAetherCore();
+
+  Future<String> crateApiSimpleStopHybridConnection();
 
   Future<String> crateApiSimpleStopProxyCore();
 
@@ -156,7 +198,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<int> crateApiSimpleGetTorBootstrapProgress() {
+  Future<int> crateApiSimpleGetAetherBootstrapProgress() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -165,6 +207,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleGetAetherBootstrapProgressConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleGetAetherBootstrapProgressConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_aether_bootstrap_progress",
+        argNames: [],
+      );
+
+  @override
+  Future<String> crateApiSimpleGetAetherStatusText() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleGetAetherStatusTextConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleGetAetherStatusTextConstMeta =>
+      const TaskConstMeta(debugName: "get_aether_status_text", argNames: []);
+
+  @override
+  Future<int> crateApiSimpleGetTorBootstrapProgress() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
             port: port_,
           );
         },
@@ -186,6 +285,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateApiSimpleIsAetherBootstrapDone() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleIsAetherBootstrapDoneConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleIsAetherBootstrapDoneConstMeta =>
+      const TaskConstMeta(debugName: "is_aether_bootstrap_done", argNames: []);
+
+  @override
+  Future<bool> crateApiSimpleIsAetherConnected() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleIsAetherConnectedConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleIsAetherConnectedConstMeta =>
+      const TaskConstMeta(debugName: "is_aether_connected", argNames: []);
+
+  @override
   Future<bool> crateApiSimpleIsConnected() {
     return handler.executeNormal(
       NormalTask(
@@ -194,7 +347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 6,
             port: port_,
           );
         },
@@ -221,7 +374,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 7,
             port: port_,
           );
         },
@@ -240,6 +393,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "is_dns_active", argNames: []);
 
   @override
+  Future<bool> crateApiSimpleIsHybridConnected() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleIsHybridConnectedConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleIsHybridConnectedConstMeta =>
+      const TaskConstMeta(debugName: "is_hybrid_connected", argNames: []);
+
+  @override
   Future<bool> crateApiSimpleIsPsiphonBootstrapDone() {
     return handler.executeNormal(
       NormalTask(
@@ -248,7 +428,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 9,
             port: port_,
           );
         },
@@ -275,7 +455,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 10,
             port: port_,
           );
         },
@@ -302,7 +482,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 11,
             port: port_,
           );
         },
@@ -332,7 +512,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 12,
             port: port_,
           );
         },
@@ -360,7 +540,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 13,
             port: port_,
           );
         },
@@ -392,7 +572,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 14,
             port: port_,
           );
         },
@@ -422,7 +602,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 15,
             port: port_,
           );
         },
@@ -456,7 +636,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 16,
             port: port_,
           );
         },
@@ -491,7 +671,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 17,
             port: port_,
           );
         },
@@ -512,6 +692,145 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<String> crateApiSimpleStartAetherCore({
+    required String binaryPath,
+    required String mode,
+    required String noize,
+    String? warpKey,
+    String? team,
+    required bool useSystemProxy,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(binaryPath, serializer);
+          sse_encode_String(mode, serializer);
+          sse_encode_String(noize, serializer);
+          sse_encode_opt_String(warpKey, serializer);
+          sse_encode_opt_String(team, serializer);
+          sse_encode_bool(useSystemProxy, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleStartAetherCoreConstMeta,
+        argValues: [binaryPath, mode, noize, warpKey, team, useSystemProxy],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleStartAetherCoreConstMeta =>
+      const TaskConstMeta(
+        debugName: "start_aether_core",
+        argNames: [
+          "binaryPath",
+          "mode",
+          "noize",
+          "warpKey",
+          "team",
+          "useSystemProxy",
+        ],
+      );
+
+  @override
+  Future<String> crateApiSimpleStartHybridConnection({
+    required String singboxPath,
+    required String aetherPath,
+    required ProxyNode selectedNode,
+    required String aetherMode,
+    required String aetherNoize,
+    String? aetherWarpKey,
+    String? aetherTeam,
+    required bool useSystemProxy,
+    required bool useTunMode,
+    required String dnsType,
+    required String dnsPrimary,
+    required String dnsSecondary,
+    String? dnsDotHost,
+    String? utlsFingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(singboxPath, serializer);
+          sse_encode_String(aetherPath, serializer);
+          sse_encode_box_autoadd_proxy_node(selectedNode, serializer);
+          sse_encode_String(aetherMode, serializer);
+          sse_encode_String(aetherNoize, serializer);
+          sse_encode_opt_String(aetherWarpKey, serializer);
+          sse_encode_opt_String(aetherTeam, serializer);
+          sse_encode_bool(useSystemProxy, serializer);
+          sse_encode_bool(useTunMode, serializer);
+          sse_encode_String(dnsType, serializer);
+          sse_encode_String(dnsPrimary, serializer);
+          sse_encode_String(dnsSecondary, serializer);
+          sse_encode_opt_String(dnsDotHost, serializer);
+          sse_encode_opt_String(utlsFingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleStartHybridConnectionConstMeta,
+        argValues: [
+          singboxPath,
+          aetherPath,
+          selectedNode,
+          aetherMode,
+          aetherNoize,
+          aetherWarpKey,
+          aetherTeam,
+          useSystemProxy,
+          useTunMode,
+          dnsType,
+          dnsPrimary,
+          dnsSecondary,
+          dnsDotHost,
+          utlsFingerprint,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleStartHybridConnectionConstMeta =>
+      const TaskConstMeta(
+        debugName: "start_hybrid_connection",
+        argNames: [
+          "singboxPath",
+          "aetherPath",
+          "selectedNode",
+          "aetherMode",
+          "aetherNoize",
+          "aetherWarpKey",
+          "aetherTeam",
+          "useSystemProxy",
+          "useTunMode",
+          "dnsType",
+          "dnsPrimary",
+          "dnsSecondary",
+          "dnsDotHost",
+          "utlsFingerprint",
+        ],
+      );
+
+  @override
   Future<String> crateApiSimpleStartProxyWithNode({
     required String binaryPath,
     required ProxyNode selectedNode,
@@ -526,6 +845,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String dnsSecondary,
     String? dnsDohUrl,
     String? dnsDotHost,
+    String? utlsFingerprint,
+    String? fragmentFallbackDelay,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -544,10 +865,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(dnsSecondary, serializer);
           sse_encode_opt_String(dnsDohUrl, serializer);
           sse_encode_opt_String(dnsDotHost, serializer);
+          sse_encode_opt_String(utlsFingerprint, serializer);
+          sse_encode_opt_String(fragmentFallbackDelay, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 20,
             port: port_,
           );
         },
@@ -570,6 +893,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           dnsSecondary,
           dnsDohUrl,
           dnsDotHost,
+          utlsFingerprint,
+          fragmentFallbackDelay,
         ],
         apiImpl: this,
       ),
@@ -593,6 +918,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "dnsSecondary",
           "dnsDohUrl",
           "dnsDotHost",
+          "utlsFingerprint",
+          "fragmentFallbackDelay",
         ],
       );
 
@@ -612,7 +939,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 21,
             port: port_,
           );
         },
@@ -649,7 +976,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 22,
             port: port_,
           );
         },
@@ -670,6 +997,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<String> crateApiSimpleStopAetherCore() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleStopAetherCoreConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleStopAetherCoreConstMeta =>
+      const TaskConstMeta(debugName: "stop_aether_core", argNames: []);
+
+  @override
+  Future<String> crateApiSimpleStopHybridConnection() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleStopHybridConnectionConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleStopHybridConnectionConstMeta =>
+      const TaskConstMeta(debugName: "stop_hybrid_connection", argNames: []);
+
+  @override
   Future<String> crateApiSimpleStopProxyCore() {
     return handler.executeNormal(
       NormalTask(
@@ -678,7 +1059,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 25,
             port: port_,
           );
         },
@@ -705,7 +1086,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 26,
             port: port_,
           );
         },
@@ -732,7 +1113,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 27,
             port: port_,
           );
         },

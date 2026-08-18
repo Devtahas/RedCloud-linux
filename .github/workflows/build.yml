@@ -2,86 +2,120 @@ name: Build and Release RedCloud VPN
 
 on:
   push:
-    branches: [ "main" ] # اجرا به محض ثبت کدهای جدید در گیت‌هاب
-  workflow_dispatch: # اجازه اجرای دستی بیلد از داخل زبانه Actions گیت‌هاب
+    branches: [ "main" ] # اجرا به محض کامیت و پوش روی برنچ اصلی
+  workflow_dispatch: # امکان اجرای دستی بیلد از داخل تب Actions
 
 permissions:
-  contents: write # دسترسی برای اجازه دادن به گیت‌هاب جهت ساخت ریلیز و آپلود فایل‌ها
+  contents: write # دسترسی لازم برای ساخت ریلیز و آپلود فایل نصبی
 
 jobs:
   build:
-    runs-on: windows-latest # استفاده از سرور ویندوز گیت‌هاب
+    name: Build Windows Release & Package Installer
+    runs-on: windows-latest
 
     steps:
+    # ۱. کلون کردن کدهای پروژه
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # ۲. راه‌اندازی کامپایلر Rust
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: x86_64-pc-windows-msvc
 
+    # ۳. راه‌اندازی محیط فلاتر
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
+        cache: true
 
+    # ۴. نصب ابزار تولید پل ارتباطی flutter_rust_bridge
+    - name: Install FRB Codegen
+      run: |
+        cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
+
+    # ۵. جنریت کردن کدهای پل ارتباطی Rust و Dart
+    - name: Generate Rust Bridge
+      run: |
+        flutter_rust_bridge_codegen generate
+
+    # ۶. دریافت وابستگی‌های فلاتر
     - name: Install Flutter dependencies
       run: flutter pub get
 
+    # ۷. بیلد اپلیکیشن ویندوز در حالت Release
     - name: Build Windows Application (Release Mode)
       run: flutter build windows --release
 
+    # ۸. دانلود خودکار و مستقیم تمام هسته‌های باینری از مخازن رسمی
     - name: Download Official Core Binaries (Secure & Untouched)
       shell: pwsh
       run: |
-        # ایجاد پوشه مقصد برای باینری‌ها
-        New-Item -ItemType Directory -Force -Path build\windows\x64\runner\Release
+        # ایجاد پوشه مقصد Release
+        New-Item -ItemType Directory -Force -Path "build\windows\x64\runner\Release"
 
-        # ۱. دانلود نسخه رسمی sing-box مستقیم از ریپازیتوری SagerNet
-        Write-Host "Downloading official sing-box..."
-        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.13.12/sing-box-1.13.12-windows-amd64.zip" -OutFile "sing-box.zip"
+        # ۱. دانلود آخرین نسخه رسمی موتور Aether (موتور MASQUE ضدسانسور)
+        Write-Host "Downloading official Aether engine..."
+        Invoke-WebRequest -Uri "https://github.com/CluvexStudio/Aether/releases/latest/download/aether-windows-x86_64.zip" -OutFile "aether.zip"
+        Expand-Archive -Path "aether.zip" -DestinationPath "temp-aether" -Force
+        Get-ChildItem -Path "temp-aether" -Filter "aether.exe" -Recurse | Copy-Item -Destination "aether.exe" -Force
+        Copy-Item "aether.exe" -Destination "build\windows\x64\runner\Release\aether.exe" -Force
+
+        # ۲. دانلود نسخه رسمی sing-box 1.13.13 از مخزن رسمی SagerNet
+        Write-Host "Downloading official sing-box 1.13.13..."
+        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.13.13/sing-box-1.13.13-windows-amd64.zip" -OutFile "sing-box.zip"
         Expand-Archive -Path "sing-box.zip" -DestinationPath "temp-singbox" -Force
-        Copy-Item "temp-singbox\sing-box-1.13.12-windows-amd64\sing-box.exe" -Destination "build\windows\x64\runner\Release\sing-box.exe" -Force
+        Get-ChildItem -Path "temp-singbox" -Filter "sing-box.exe" -Recurse | Copy-Item -Destination "sing-box.exe" -Force
+        Copy-Item "sing-box.exe" -Destination "build\windows\x64\runner\Release\sing-box.exe" -Force
 
-        # ۲. دانلود نسخه رسمی wintun.dll مستقیم از سرور wintun.net (حیاتی برای TUN Mode)
+        # ۳. دانلود درایور رسمی Wintun (حیاتی برای کارت شبکه مجازی TUN Mode)
         Write-Host "Downloading official wintun.dll..."
         Invoke-WebRequest -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile "wintun.zip"
         Expand-Archive -Path "wintun.zip" -DestinationPath "temp-wintun" -Force
+        Copy-Item "temp-wintun\wintun\bin\amd64\wintun.dll" -Destination "wintun.dll" -Force
         Copy-Item "temp-wintun\wintun\bin\amd64\wintun.dll" -Destination "build\windows\x64\runner\Release\wintun.dll" -Force
 
-        # ۳. دانلود نسخه رسمی Tor (Expert Bundle) مستقیم از آرشیو رسمی Tor Project
-        Write-Host "Downloading official Tor..."
+        # ۴. دانلود نسخه رسمی Tor Expert Bundle از آرشیو رسمی Tor Project
+        Write-Host "Downloading official Tor Expert Bundle..."
         Invoke-WebRequest -Uri "https://archive.torproject.org/tor-package-archive/torbrowser/14.0.8/tor-expert-bundle-windows-x86_64-14.0.8.tar.gz" -OutFile "tor.tar.gz"
         tar -xzf "tor.tar.gz" -C "."
-        Copy-Item "tor\tor.exe" -Destination "build\windows\x64\runner\Release\tor.exe" -Force
+        Get-ChildItem -Path "tor" -Filter "tor.exe" -Recurse | Copy-Item -Destination "tor.exe" -Force
+        Copy-Item "tor.exe" -Destination "build\windows\x64\runner\Release\tor.exe" -Force
 
-        # ۴. دانلود نسخه رسمی ویندوز سایفون و نام‌گذاری مناسب آن
+        # ۵. دانلود نسخه رسمی ویندوز سایفون
         Write-Host "Downloading official Psiphon Core..."
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/windows/psiphon-tunnel-core-i686.exe" -OutFile "build\windows\x64\runner\Release\psiphon-tunnel-core.exe"
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/windows/psiphon-tunnel-core-i686.exe" -OutFile "psiphon-tunnel-core.exe"
+        Copy-Item "psiphon-tunnel-core.exe" -Destination "build\windows\x64\runner\Release\psiphon-tunnel-core.exe" -Force
 
+    # ۹. نصب Inno Setup و ساخت فایل نصبی
     - name: Compile Installer with Inno Setup
+      shell: pwsh
       run: |
-        iscc installer.iss
+        choco install innosetup --no-progress
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
+    # ۱۰. انتشار خودکار در تب Releases گیت‌هاب
     - name: Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: latest # تگ ثابت برای اینکه همیشه جدیدترین نسخه ریلیز را اوررایت کند
-        name: "RedCloud VPN Latest Release"
+        tag_name: latest
+        name: "RedCloud VPN Latest Release (v3.5)"
         body: |
-          این یک نسخهٔ انتشاریافتهٔ خودکار از آخرین بیلد کدهای شما در ویندوز است.
+          🚀 **انتشار خودکار نسخه جدید نرم‌افزار RedCloud VPN**
           
-          **تغییرات این نسخه:**
-          - فعال‌سازی کارت شبکه مجازی (TUN Mode) سیستمی
-          - نمایش زنده و واقعی سرعت آپلود و دانلود
-          - ویرایشگر پیشرفته کانفیگ‌های ویتوری
-          - پایش موازی پینگ و مرتب‌سازی هوشمند سرورها
+          ### ✨ ویژگی‌های این بیلد:
+          - مجهز به آخرین نسخه موتور ضدسانسور **Aether (MASQUE H3/QUIC)**
+          - پشتیبانی از **Sing-box 1.13.13** و پروتکل‌های **Hysteria 2** و **VLESS Reality**
+          - کارت شبکه مجازی سیستمی (**TUN Mode**) با درایور Wintun
+          - تب **راهنمای جامع کاربری** درون‌برنامه‌ای
+          - پایش موازی پینگ و چرخش خودکار اکانت‌ها
           
-          *تمامی کدهای باینری هسته‌ها (sing-box, Tor, Psiphon, Wintun) به طور خودکار و مستقیم از مخازن مرجع و امضاشدهٔ کمپانی‌های سازنده دانلود و بسته‌بندی شده‌اند.*
+          *تمامی هسته‌ها (Aether, Sing-box, Wintun, Tor, Psiphon) حین فرآیند بیلد مستقیماً از منابع رسمی دانلود و بسته‌بندی شده‌اند.*
         draft: false
         prerelease: false
         files: |
-          RedCloud_Setup.exe
+          RedCloud_VPN_Setup_*.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

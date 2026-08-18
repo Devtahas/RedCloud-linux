@@ -849,6 +849,7 @@ dependencies = [
  "serde_json",
  "url",
  "urlencoding",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

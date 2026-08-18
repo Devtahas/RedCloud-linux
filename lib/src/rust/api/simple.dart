@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `convert_link_to_outbound`, `scan_single_ip`, `set_windows_system_proxy`
+// These functions are ignored because they are not marked as `pub`: `assign_child_to_job`, `convert_link_to_outbound`, `get_global_job_object`, `get_safe_work_dir`, `notify_windows_proxy_change`, `process_aether_line`, `resolve_binary_path`, `scan_single_ip`, `set_windows_system_proxy`, `spawn_single_aether_mode`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
 
 Future<bool> isConnected() => RustLib.instance.api.crateApiSimpleIsConnected();
@@ -17,25 +17,35 @@ Future<bool> isTorConnected() =>
 Future<bool> isPsiphonConnected() =>
     RustLib.instance.api.crateApiSimpleIsPsiphonConnected();
 
+Future<bool> isAetherConnected() =>
+    RustLib.instance.api.crateApiSimpleIsAetherConnected();
+
+Future<bool> isHybridConnected() =>
+    RustLib.instance.api.crateApiSimpleIsHybridConnected();
+
 Future<bool> isDnsActive() => RustLib.instance.api.crateApiSimpleIsDnsActive();
 
-/// دریافت درصد پیشرفت فعلی فرآیند بوت‌استرپ تور توسط فلاتر
 Future<int> getTorBootstrapProgress() =>
     RustLib.instance.api.crateApiSimpleGetTorBootstrapProgress();
 
-/// بررسی اینکه آیا اتصال سایفون به سرورهای خارجی به طور واقعی برقرار شده است یا خیر
 Future<bool> isPsiphonBootstrapDone() =>
     RustLib.instance.api.crateApiSimpleIsPsiphonBootstrapDone();
 
-/// پینگ سریع سرور دی‌ان‌اس روی پورت ۵۳
+Future<int> getAetherBootstrapProgress() =>
+    RustLib.instance.api.crateApiSimpleGetAetherBootstrapProgress();
+
+Future<bool> isAetherBootstrapDone() =>
+    RustLib.instance.api.crateApiSimpleIsAetherBootstrapDone();
+
+Future<String> getAetherStatusText() =>
+    RustLib.instance.api.crateApiSimpleGetAetherStatusText();
+
 Future<int> pingDnsServer({required String ip}) =>
     RustLib.instance.api.crateApiSimplePingDnsServer(ip: ip);
 
-/// پینگ سریع و واقعی آدرس سرور پروکسی روی پورت مقصد با اندازه گیری لاتنسی دست دهی TCP
 Future<int> pingProxyServer({required String host, required int port}) =>
     RustLib.instance.api.crateApiSimplePingProxyServer(host: host, port: port);
 
-/// اعمال دی‌ان‌اس انتخابی کاربر روی تمام کارت‌های شبکه فعال ویندوز با پاورشل بومی
 Future<String> setSystemDns({
   required String primary,
   required String secondary,
@@ -44,11 +54,64 @@ Future<String> setSystemDns({
   secondary: secondary,
 );
 
-/// بازنشانی تنظیمات دی‌ان‌اس سیستم‌عامل به حالت خودکار (DHCP)
 Future<String> resetSystemDns() =>
     RustLib.instance.api.crateApiSimpleResetSystemDns();
 
-/// شروع به کار هسته تور به همراه HTTPTunnelPort مجزا جهت رفع کامل نشت DNS
+Future<String> startAetherCore({
+  required String binaryPath,
+  required String mode,
+  required String noize,
+  String? warpKey,
+  String? team,
+  required bool useSystemProxy,
+}) => RustLib.instance.api.crateApiSimpleStartAetherCore(
+  binaryPath: binaryPath,
+  mode: mode,
+  noize: noize,
+  warpKey: warpKey,
+  team: team,
+  useSystemProxy: useSystemProxy,
+);
+
+Future<String> stopAetherCore() =>
+    RustLib.instance.api.crateApiSimpleStopAetherCore();
+
+/// شروع اتصال هیبریدی کاملاً منطبق بر استاندارد Sing-box 1.10 - 1.14+ با فیلد مدرن address آرایه‌ای
+Future<String> startHybridConnection({
+  required String singboxPath,
+  required String aetherPath,
+  required ProxyNode selectedNode,
+  required String aetherMode,
+  required String aetherNoize,
+  String? aetherWarpKey,
+  String? aetherTeam,
+  required bool useSystemProxy,
+  required bool useTunMode,
+  required String dnsType,
+  required String dnsPrimary,
+  required String dnsSecondary,
+  String? dnsDotHost,
+  String? utlsFingerprint,
+}) => RustLib.instance.api.crateApiSimpleStartHybridConnection(
+  singboxPath: singboxPath,
+  aetherPath: aetherPath,
+  selectedNode: selectedNode,
+  aetherMode: aetherMode,
+  aetherNoize: aetherNoize,
+  aetherWarpKey: aetherWarpKey,
+  aetherTeam: aetherTeam,
+  useSystemProxy: useSystemProxy,
+  useTunMode: useTunMode,
+  dnsType: dnsType,
+  dnsPrimary: dnsPrimary,
+  dnsSecondary: dnsSecondary,
+  dnsDotHost: dnsDotHost,
+  utlsFingerprint: utlsFingerprint,
+);
+
+Future<String> stopHybridConnection() =>
+    RustLib.instance.api.crateApiSimpleStopHybridConnection();
+
 Future<String> startTorCore({
   required String binaryPath,
   required String countryCode,
@@ -59,11 +122,9 @@ Future<String> startTorCore({
   useSystemProxy: useSystemProxy,
 );
 
-/// متوقف کردن کامل شبکه تور
 Future<String> stopTorCore() =>
     RustLib.instance.api.crateApiSimpleStopTorCore();
 
-/// شروع به کار هسته بومی سایفون به همراه ساخت پورت بومی HTTP Proxy جهت مهار نشت DNS
 Future<String> startPsiphonCore({
   required String binaryPath,
   required String countryCode,
@@ -74,11 +135,9 @@ Future<String> startPsiphonCore({
   useSystemProxy: useSystemProxy,
 );
 
-/// متوقف کردن کامل شبکه سایفون
 Future<String> stopPsiphonCore() =>
     RustLib.instance.api.crateApiSimpleStopPsiphonCore();
 
-/// شروع اسکن چندنخی آی‌پی‌های کلودفلر
 Future<List<ProxyNode>> runCloudflareScanner({
   required String uuid,
   required String path,
@@ -89,7 +148,6 @@ Future<List<ProxyNode>> runCloudflareScanner({
   worker: worker,
 );
 
-/// اجرای پروکسی سنگ‌باکس با هدایت قطعی خروجی‌ها به Stdio::null جهت مخفی‌سازی کامل و بی‌صدا
 Future<String> startProxyWithNode({
   required String binaryPath,
   required ProxyNode selectedNode,
@@ -104,6 +162,8 @@ Future<String> startProxyWithNode({
   required String dnsSecondary,
   String? dnsDohUrl,
   String? dnsDotHost,
+  String? utlsFingerprint,
+  String? fragmentFallbackDelay,
 }) => RustLib.instance.api.crateApiSimpleStartProxyWithNode(
   binaryPath: binaryPath,
   selectedNode: selectedNode,
@@ -118,13 +178,13 @@ Future<String> startProxyWithNode({
   dnsSecondary: dnsSecondary,
   dnsDohUrl: dnsDohUrl,
   dnsDotHost: dnsDotHost,
+  utlsFingerprint: utlsFingerprint,
+  fragmentFallbackDelay: fragmentFallbackDelay,
 );
 
-/// قطع پروکسی و بازگردانی تنظیمات پروکسی سیستم‌عامل به حالت اول
 Future<String> stopProxyCore() =>
     RustLib.instance.api.crateApiSimpleStopProxyCore();
 
-/// پردازش اولیه ورودی‌های لینک‌ها
 Future<List<ProxyNode>> parseImportLinks({required String input}) =>
     RustLib.instance.api.crateApiSimpleParseImportLinks(input: input);
 
