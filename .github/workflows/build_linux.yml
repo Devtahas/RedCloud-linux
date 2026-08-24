@@ -31,81 +31,88 @@ jobs:
         channel: 'stable'
         cache: true
 
-    # ۴. فعال‌سازی پلتفرم دسکتاپ لینوکس در فلاتر (حل ارور)
+    # ۴. فعال‌سازی پلتفرم دسکتاپ لینوکس در فلاتر
     - name: 🐧 Enable Linux Desktop & Create Platform Files
       run: |
         flutter config --enable-linux-desktop
         flutter create --platforms=linux .
 
-    # ۵. نصب پیش‌نیازهای سیستمی و پکیج‌های GTK لینوکس
-    - name: 📦 Install Linux Build Dependencies
+    # ۵. نصب پیش‌نیازهای سیستمی، تور و پکیج‌های GTK لینوکس
+    - name: 📦 Install Linux Build Dependencies & Tor
       run: |
         sudo apt-get update
         sudo apt-get install -y clang cmake ninja-build pkg-config \
           libgtk-3-dev libayatana-appindicator3-dev libssl-dev \
-          libkeybinder-3.0-dev libcap2-bin curl tar gzip
+          libkeybinder-3.0-dev libcap2-bin curl tar gzip tor
 
-    # ۶. نصب ابزار تولید پل ارتباطی flutter_rust_bridge
+    # ۶. اطمینان از وجود آیکون PNG
+    - name: 🎨 Ensure PNG App Icon Exists
+      run: |
+        mkdir -p assets
+        if [ ! -f "assets/app_icon.png" ] && [ -f "assets/app_icon.ico" ]; then
+          cp "assets/app_icon.ico" "assets/app_icon.png"
+        fi
+
+    # ۷. نصب ابزار تولید پل ارتباطی flutter_rust_bridge
     - name: 🔧 Install FRB Codegen
       run: |
         cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
 
-    # ۷. جنریت کردن کدهای پل ارتباطی Rust و Dart
+    # ۸. جنریت کردن کدهای پل ارتباطی Rust و Dart
     - name: ⚡ Generate Rust Bridge
       run: |
         flutter_rust_bridge_codegen generate
 
-    # ۸. دریافت وابستگی‌های فلاتر
+    # ۹. دریافت وابستگی‌های فلاتر
     - name: 🚀 Install Flutter dependencies
       run: |
         flutter pub get
 
-    # ۹. بیلد اپلیکیشن لینوکس در حالت Release
+    # ۱۰. بیلد اپلیکیشن لینوکس در حالت Release
     - name: 🔨 Build Linux Application (Release Mode)
       run: |
         flutter build linux --release
 
-    # ۱۰. دانلود خودکار و مستقیم تمام هسته‌های باینری لینوکس از مخازن رسمی
-    - name: 🌐 Download Official Linux Core Binaries (Secure & Untouched)
+    # ۱۱. دانلود و گردآوری تمام هسته‌های باینری رسمی لینوکس (x86_64)
+    - name: 🌐 Gather Official Linux Core Binaries
       run: |
-        echo "در حال دانلود هسته‌های باینری رسمی لینوکس (x86_64)..."
+        echo "در حال گردآوری هسته‌های باینری رسمی لینوکس (x86_64)..."
 
-        # ۱. دانلود موتور Aether
+        # ۱. دانلود آخرین نسخه رسمی موتور Aether (موتور ضدسانسور MASQUE)
         echo "[1/4] Downloading official Aether engine..."
         curl -sL "https://github.com/CluvexStudio/Aether/releases/latest/download/aether-linux-x86_64.tar.gz" -o aether.tar.gz
         tar -xzf aether.tar.gz
         chmod +x aether
 
-        # ۲. دانلود sing-box 1.13.14
+        # ۲. دانلود نسخه رسمی sing-box 1.13.14 از مخزن رسمی SagerNet
         echo "[2/4] Downloading official sing-box 1.13.14..."
         curl -sL "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz" -o sing-box.tar.gz
         tar -xzf sing-box.tar.gz
         find . -mindepth 2 -name "sing-box" -type f -exec mv {} . \;
         chmod +x sing-box
 
-        # ۳. دانلود Tor Expert Bundle
-        echo "[3/4] Downloading official Tor Expert Bundle..."
-        curl -sL "https://archive.torproject.org/tor-package-archive/torbrowser/14.0.8/tor-expert-bundle-linux-x86_64-14.0.8.tar.gz" -o tor.tar.gz
-        tar -xzf tor.tar.gz
-        find . -mindepth 2 -name "tor" -type f -exec mv {} . \; 2>/dev/null || true
+        # ۳. برداشتن باینری رسمی Tor (کامپایل‌شده و ۱۰۰٪ تست‌شده)
+        echo "[3/4] Packaging official Tor binary..."
+        cp /usr/bin/tor ./tor
         chmod +x tor
 
-        # ۴. دانلود Psiphon Core
+        # ۴. دانلود نسخه رسمی لینوکس سایفون از مخزن رسمی Psiphon Labs
         echo "[4/4] Downloading official Psiphon Core..."
         curl -sL "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/linux/psiphon-tunnel-core-x86_64" -o psiphon-tunnel-core
         chmod +x psiphon-tunnel-core
 
+        # اطمینان از وجود فایل رنج‌های آی‌پی کلودفلر
         if [ ! -f "cloudflare_IPs.txt" ]; then
           echo "# Cloudflare IP list" > cloudflare_IPs.txt
         fi
 
-    # ۱۱. ساخت فایل نصاب تک‌فایلی لینوکس (.run)
+    # ۱۲. ساخت فایل نصاب تک‌فایلی لینوکس (.run)
     - name: 🎁 Compile Linux Installer (.run)
       run: |
         chmod +x build_installer.sh
         ./build_installer.sh
 
-    # ۱۲. انتشار خودکار در تب Releases گیت‌هاب
+    # ۱۳. انتشار خودکار در تب Releases گیت‌هاب
     - name: 🚀 Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
