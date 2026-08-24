@@ -2,11 +2,11 @@ name: Build and Release RedCloud VPN (Linux Edition)
 
 on:
   push:
-    branches: [ "main", "master" ] # اجرا با هر کامیت روی برنچ اصلی
-  workflow_dispatch: # امکان اجرای دستی بیلد از داخل تب Actions
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 permissions:
-  contents: write # دسترسی لازم برای ساخت ریلیز و آپلود فایل نصبی در گیت‌هاب
+  contents: write
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
     - name: 📥 Checkout repository
       uses: actions/checkout@v4
 
-    # ۲. راه‌اندازی کامپایلر Rust برای معماری لینوکس x86_64
+    # ۲. راه‌اندازی کامپایلر Rust
     - name: 🦀 Set up Rust
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -31,7 +31,13 @@ jobs:
         channel: 'stable'
         cache: true
 
-    # ۴. نصب پیش‌نیازهای سیستمی و پکیج‌های GTK لینوکس
+    # ۴. فعال‌سازی پلتفرم دسکتاپ لینوکس در فلاتر (حل ارور)
+    - name: 🐧 Enable Linux Desktop & Create Platform Files
+      run: |
+        flutter config --enable-linux-desktop
+        flutter create --platforms=linux .
+
+    # ۵. نصب پیش‌نیازهای سیستمی و پکیج‌های GTK لینوکس
     - name: 📦 Install Linux Build Dependencies
       run: |
         sudo apt-get update
@@ -39,68 +45,67 @@ jobs:
           libgtk-3-dev libayatana-appindicator3-dev libssl-dev \
           libkeybinder-3.0-dev libcap2-bin curl tar gzip
 
-    # ۵. نصب ابزار تولید پل ارتباطی flutter_rust_bridge
+    # ۶. نصب ابزار تولید پل ارتباطی flutter_rust_bridge
     - name: 🔧 Install FRB Codegen
       run: |
         cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
 
-    # ۶. جنریت کردن کدهای پل ارتباطی Rust و Dart
+    # ۷. جنریت کردن کدهای پل ارتباطی Rust و Dart
     - name: ⚡ Generate Rust Bridge
       run: |
         flutter_rust_bridge_codegen generate
 
-    # ۷. دریافت وابستگی‌های فلاتر
+    # ۸. دریافت وابستگی‌های فلاتر
     - name: 🚀 Install Flutter dependencies
       run: |
         flutter pub get
 
-    # ۸. بیلد اپلیکیشن لینوکس در حالت Release
+    # ۹. بیلد اپلیکیشن لینوکس در حالت Release
     - name: 🔨 Build Linux Application (Release Mode)
       run: |
         flutter build linux --release
 
-    # ۹. دانلود خودکار و مستقیم تمام هسته‌های باینری لینوکس از مخازن رسمی
+    # ۱۰. دانلود خودکار و مستقیم تمام هسته‌های باینری لینوکس از مخازن رسمی
     - name: 🌐 Download Official Linux Core Binaries (Secure & Untouched)
       run: |
         echo "در حال دانلود هسته‌های باینری رسمی لینوکس (x86_64)..."
 
-        # ۱. دانلود آخرین نسخه رسمی موتور Aether (موتور ضدسانسور MASQUE)
+        # ۱. دانلود موتور Aether
         echo "[1/4] Downloading official Aether engine..."
         curl -sL "https://github.com/CluvexStudio/Aether/releases/latest/download/aether-linux-x86_64.tar.gz" -o aether.tar.gz
         tar -xzf aether.tar.gz
         chmod +x aether
 
-        # ۲. دانلود نسخه رسمی sing-box 1.13.14 از مخزن رسمی SagerNet
+        # ۲. دانلود sing-box 1.13.14
         echo "[2/4] Downloading official sing-box 1.13.14..."
         curl -sL "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz" -o sing-box.tar.gz
         tar -xzf sing-box.tar.gz
         find . -mindepth 2 -name "sing-box" -type f -exec mv {} . \;
         chmod +x sing-box
 
-        # ۳. دانلود نسخه رسمی لینوکس Tor Expert Bundle از آرشیو رسمی Tor Project
+        # ۳. دانلود Tor Expert Bundle
         echo "[3/4] Downloading official Tor Expert Bundle..."
         curl -sL "https://archive.torproject.org/tor-package-archive/torbrowser/14.0.8/tor-expert-bundle-linux-x86_64-14.0.8.tar.gz" -o tor.tar.gz
         tar -xzf tor.tar.gz
         find . -mindepth 2 -name "tor" -type f -exec mv {} . \; 2>/dev/null || true
         chmod +x tor
 
-        # ۴. دانلود نسخه رسمی لینوکس سایفون از مخزن رسمی Psiphon Labs
+        # ۴. دانلود Psiphon Core
         echo "[4/4] Downloading official Psiphon Core..."
         curl -sL "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/linux/psiphon-tunnel-core-x86_64" -o psiphon-tunnel-core
         chmod +x psiphon-tunnel-core
 
-        # اطمینان از وجود فایل رنج‌های آی‌پی کلودفلر
         if [ ! -f "cloudflare_IPs.txt" ]; then
           echo "# Cloudflare IP list" > cloudflare_IPs.txt
         fi
 
-    # ۱۰. ساخت فایل نصاب تک‌فایلی لینوکس (.run)
+    # ۱۱. ساخت فایل نصاب تک‌فایلی لینوکس (.run)
     - name: 🎁 Compile Linux Installer (.run)
       run: |
         chmod +x build_installer.sh
         ./build_installer.sh
 
-    # ۱۱. انتشار خودکار در تب Releases گیت‌هاب
+    # ۱۲. انتشار خودکار در تب Releases گیت‌هاب
     - name: 🚀 Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
@@ -111,23 +116,12 @@ jobs:
           
           این نسخه روی تمامی توزیع‌های لینوکس از جمله **Kali Linux، Debian، Ubuntu، Arch Linux، BlackArch، Fedora** و... با یک دستور ساده نصب می‌شود.
           
-          ### ✨ ویژگی‌های این بیلد لینوکس:
-          - مجهز به آخرین نسخه موتور ضدسانسور **Aether (MASQUE H3/QUIC & H2 Fragment)**
-          - پشتیبانی از **Sing-box 1.13.14** و پروتکل‌های **Hysteria 2** و **VLESS Reality**
-          - پکیج کامل **Tor Expert Bundle** و **Psiphon Tunnel Core**
-          - اعطای خودکار دسترسی‌های شبکه کرنل (**TUN Capabilities**) بدون نیاز به پسورد روت حین اجرا
-          - اجرای سریع با تایپ دستور `redcloud` در هر ترمینال
-          - ساخت خودکار شورت‌کات روی صفحه **Desktop** و منوی برنامه‌ها
-          - اسکنر دو‌حالته کلودفلر با بررسی واقعی وب‌ساکت لایه ۷
-          
           ---
           ### 📥 نحوه نصب در لینوکس:
           ```bash
           chmod +x RedCloud-Linux-Installer-v3.5.run
           sudo ./RedCloud-Linux-Installer-v3.5.run
           ```
-          
-          *تمامی هسته‌های باینری مستقیماً حین فرآیند بیلد از مخازن رسمی دانلود و پکیج شده‌اند.*
         draft: false
         prerelease: false
         files: |
