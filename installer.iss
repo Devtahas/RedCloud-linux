@@ -46,6 +46,9 @@ Source: "aether.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesnte
 Source: "sing-box.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "tor.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "psiphon-tunnel-core.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "wintun.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; اضافه شدن فایل رنج‌های کلودفلر برای حالت Deep Scan
+Source: "cloudflare_IPs.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"
@@ -57,7 +60,6 @@ Root: "HKLM"; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFla
 
 [Run]
 Filename: "taskkill.exe"; Parameters: "/F /IM {#AppExeName} /IM aether.exe /IM sing-box.exe /IM tor.exe /IM psiphon-tunnel-core.exe"; Flags: runhidden runascurrentuser; StatusMsg: "آماده‌سازی محیط..."
-; رفع خطای Code 740 با اضافه کردن فلگ shellexec
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]

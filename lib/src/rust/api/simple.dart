@@ -6,8 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `assign_child_to_job`, `convert_link_to_outbound`, `get_global_job_object`, `get_safe_work_dir`, `notify_windows_proxy_change`, `process_aether_line`, `resolve_binary_path`, `scan_single_ip`, `set_windows_system_proxy`, `spawn_single_aether_mode`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `assign_child_to_job`, `convert_link_to_outbound`, `get_global_job_object`, `get_safe_work_dir`, `load_deep_scan_ips`, `notify_windows_proxy_change`, `process_aether_line`, `resolve_binary_path`, `scan_single_ip_ws`, `set_windows_system_proxy`, `spawn_single_aether_mode`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
 Future<bool> isConnected() => RustLib.instance.api.crateApiSimpleIsConnected();
 
@@ -76,7 +76,6 @@ Future<String> startAetherCore({
 Future<String> stopAetherCore() =>
     RustLib.instance.api.crateApiSimpleStopAetherCore();
 
-/// شروع اتصال هیبریدی کاملاً منطبق بر استاندارد Sing-box 1.10 - 1.14+ با فیلد مدرن address آرایه‌ای
 Future<String> startHybridConnection({
   required String singboxPath,
   required String aetherPath,
@@ -138,14 +137,24 @@ Future<String> startPsiphonCore({
 Future<String> stopPsiphonCore() =>
     RustLib.instance.api.crateApiSimpleStopPsiphonCore();
 
+Future<void> stopCloudflareScanner() =>
+    RustLib.instance.api.crateApiSimpleStopCloudflareScanner();
+
+Future<ScannerStats> getScannerStats() =>
+    RustLib.instance.api.crateApiSimpleGetScannerStats();
+
 Future<List<ProxyNode>> runCloudflareScanner({
   required String uuid,
   required String path,
   required String worker,
+  required String scanMode,
+  required bool earlyStop,
 }) => RustLib.instance.api.crateApiSimpleRunCloudflareScanner(
   uuid: uuid,
   path: path,
   worker: worker,
+  scanMode: scanMode,
+  earlyStop: earlyStop,
 );
 
 Future<String> startProxyWithNode({
@@ -210,4 +219,35 @@ class ProxyNode {
           name == other.name &&
           protocol == other.protocol &&
           rawUrl == other.rawUrl;
+}
+
+class ScannerStats {
+  final int totalScanned;
+  final int aliveCount;
+  final int deadCount;
+  final bool isRunning;
+
+  const ScannerStats({
+    required this.totalScanned,
+    required this.aliveCount,
+    required this.deadCount,
+    required this.isRunning,
+  });
+
+  @override
+  int get hashCode =>
+      totalScanned.hashCode ^
+      aliveCount.hashCode ^
+      deadCount.hashCode ^
+      isRunning.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScannerStats &&
+          runtimeType == other.runtimeType &&
+          totalScanned == other.totalScanned &&
+          aliveCount == other.aliveCount &&
+          deadCount == other.deadCount &&
+          isRunning == other.isRunning;
 }

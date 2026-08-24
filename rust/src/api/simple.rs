@@ -1,5 +1,5 @@
-use std::fs::File;
-use std::io::{Write, BufReader, BufRead};
+use std::fs::{self, File};
+use std::io::{Write, Read, BufReader, BufRead};
 use std::process::{Command, Child, Stdio};
 use std::sync::Mutex;
 use std::thread;
@@ -10,9 +10,10 @@ use url::Url;
 use base64::{Engine as _, engine::general_purpose};
 use native_tls::TlsConnector;
 use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 
 static PROXY_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 static TOR_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
@@ -27,12 +28,22 @@ static PSIPHON_CONNECTED: Mutex<bool> = Mutex::new(false);
 static AETHER_CONNECTED: Mutex<bool> = Mutex::new(false);
 static AETHER_STATUS_MSG: Mutex<String> = Mutex::new(String::new());
 
+// متغیرهای کنترل وضعیت و آمار زنده اسکنر کلودفلر
+static SCAN_CANCELLED: AtomicBool = AtomicBool::new(false);
+static SCAN_RUNNING: AtomicBool = AtomicBool::new(false);
+static TOTAL_SCANNED: AtomicI32 = AtomicI32::new(0);
+static ALIVE_COUNT: AtomicI32 = AtomicI32::new(0);
+static DEAD_COUNT: AtomicI32 = AtomicI32::new(0);
+
+/// پیدا کردن هوشمند مسیر باینری‌ها در محیط‌های مختلف لینوکس
 fn resolve_binary_path(name: &str) -> PathBuf {
-    let file_name = PathBuf::from(name)
+    let clean_name = name.trim_end_matches(".exe");
+    let file_name = PathBuf::from(clean_name)
         .file_name()
         .map(|f| f.to_os_string())
-        .unwrap_or_else(|| std::ffi::OsString::from(name));
+        .unwrap_or_else(|| std::ffi::OsString::from(clean_name));
 
+    // ۱. بررسی کنار فایل اجرایی اصلی برنامه
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             let candidate = parent.join(&file_name);
@@ -42,11 +53,19 @@ fn resolve_binary_path(name: &str) -> PathBuf {
         }
     }
 
-    let p = PathBuf::from(name);
-    if p.exists() {
-        return p;
+    // ۲. بررسی مسیر استاندارد نصب در لینوکس (/opt/redcloud)
+    let opt_candidate = PathBuf::from("/opt/redcloud").join(&file_name);
+    if opt_candidate.exists() {
+        return opt_candidate;
     }
 
+    // ۳. بررسی مسیر /usr/local/bin
+    let local_bin = PathBuf::from("/usr/local/bin").join(&file_name);
+    if local_bin.exists() {
+        return local_bin;
+    }
+
+    // ۴. بررسی دایرکتوری جاری
     if let Ok(cur) = std::env::current_dir() {
         let candidate = cur.join(&file_name);
         if candidate.exists() {
@@ -54,82 +73,61 @@ fn resolve_binary_path(name: &str) -> PathBuf {
         }
     }
 
-    p
+    PathBuf::from(clean_name)
 }
 
 fn get_safe_work_dir() -> PathBuf {
     let dir = std::env::temp_dir().join("RedCloud");
-    let _ = std::fs::create_dir_all(&dir);
+    let _ = fs::create_dir_all(&dir);
     dir
 }
 
-#[cfg(target_os = "windows")]
-fn notify_windows_proxy_change() {
-    #[link(name = "wininet")]
-    extern "system" {
-        fn InternetSetOptionW(
-            h_internet: *mut std::ffi::c_void,
-            dw_option: u32,
-            lp_buffer: *mut std::ffi::c_void,
-            dw_buffer_length: u32,
-        ) -> i32;
-    }
-
+/// پیکربندی فرآیندها در لینوکس: در صورت کرش یا بسته شدن برنامه اصلی، فرزندان فوراً توسط کرنل بسته شوند
+#[cfg(target_os = "linux")]
+fn configure_linux_command(cmd: &mut Command) {
     unsafe {
-        const INTERNET_OPTION_SETTINGS_CHANGED: u32 = 39;
-        const INTERNET_OPTION_REFRESH: u32 = 37;
-        InternetSetOptionW(std::ptr::null_mut(), INTERNET_OPTION_SETTINGS_CHANGED, std::ptr::null_mut(), 0);
-        InternetSetOptionW(std::ptr::null_mut(), INTERNET_OPTION_REFRESH, std::ptr::null_mut(), 0);
+        cmd.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+            libc::setpgid(0, 0);
+            Ok(())
+        });
     }
 }
 
-#[cfg(target_os = "windows")]
-fn get_global_job_object() -> Option<usize> {
-    static WIN_JOB_OBJECT: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
-    *WIN_JOB_OBJECT.get_or_init(|| {
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_command(_cmd: &mut Command) {}
+
+/// بستن امن و قطعی یک پروسه در لینوکس
+fn kill_child_gracefully(child: &mut Child) {
+    let _ = child.kill();
+    #[cfg(target_os = "linux")]
+    {
+        let pid = child.id() as i32;
         unsafe {
-            use windows_sys::Win32::System::JobObjects::{
-                CreateJobObjectW, SetInformationJobObject, JobObjectExtendedLimitInformation,
-                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-            };
-
-            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if job as usize == 0 || job as isize == -1 {
-                return None;
-            }
-
-            let mut info = std::mem::zeroed::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
-            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-
-            let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
-            let res = SetInformationJobObject(
-                job,
-                JobObjectExtendedLimitInformation,
-                &info as *const _ as *const _,
-                size,
-            );
-
-            if res == 0 {
-                windows_sys::Win32::Foundation::CloseHandle(job);
-                None
-            } else {
-                Some(job as usize)
-            }
+            libc::kill(-pid, libc::SIGKILL);
+            libc::kill(pid, libc::SIGKILL);
         }
-    })
+    }
 }
 
-#[cfg(target_os = "windows")]
-fn assign_child_to_job(child: &std::process::Child) {
-    use std::os::windows::io::AsRawHandle;
-    let child_handle = child.as_raw_handle();
-    if let Some(job_handle_usize) = get_global_job_object() {
-        unsafe {
-            use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
-            let h_job = job_handle_usize as windows_sys::Win32::Foundation::HANDLE;
-            let h_proc = child_handle as windows_sys::Win32::Foundation::HANDLE;
-            let _ = AssignProcessToJobObject(h_job, h_proc);
-        }
+/// بستن پروسه‌ها با نام در لینوکس
+fn kill_processes_by_name(name: &str) {
+    let clean_name = name.trim_end_matches(".exe");
+    let _ = Command::new("pkill").args(&["-9", "-f", clean_name]).output();
+}
+
+/// تنظیم پروکسی سیستمی در محیط‌های دسکتاپ لینوکس (GNOME, Kali, Ubuntu, Cinnamon, etc.)
+fn set_linux_system_proxy(enable: bool, host: String, port: u16) {
+    if enable {
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy", "mode", "manual"]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.http", "host", &host]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.http", "port", &port.to_string()]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.https", "host", &host]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.https", "port", &port.to_string()]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.socks", "host", &host]).output();
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy.socks", "port", &port.to_string()]).output();
+    } else {
+        let _ = Command::new("gsettings").args(&["set", "org.gnome.system.proxy", "mode", "none"]).output();
     }
 }
 
@@ -139,6 +137,15 @@ pub struct ProxyNode {
     pub name: String,
     pub protocol: String,
     pub raw_url: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[flutter_rust_bridge::frb(non_opaque)]
+pub struct ScannerStats {
+    pub total_scanned: i32,
+    pub alive_count: i32,
+    pub dead_count: i32,
+    pub is_running: bool,
 }
 
 pub fn is_connected() -> bool {
@@ -215,6 +222,7 @@ pub fn ping_proxy_server(host: String, port: u16) -> i32 {
     -1
 }
 
+/// اعمال دی‌ان‌اس در لینوکس با resolvectl و فایل resolv.conf
 pub fn set_system_dns(primary: String, secondary: String) -> Result<String, String> {
     let mut process_guard = ACTIVE_DNS.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -228,114 +236,55 @@ pub fn set_system_dns(primary: String, secondary: String) -> Result<String, Stri
     let secondary_ip: IpAddr = secondary.trim().parse()
         .map_err(|_| "آدرس آی‌پی ثانویه نامعتبر است.".to_string())?;
 
-    let script = format!(
-        "Get-NetAdapter | Where-Object {{$_.Status -eq 'Up'}} | Set-DnsClientServerAddress -ServerAddresses ('{}', '{}')",
-        primary_ip, secondary_ip
-    );
+    // تلاش اول: با استفاده از resolvectl مدرن در لینوکس (systemd-resolved)
+    let resolvectl_out = Command::new("resolvectl")
+        .args(&["dns", "tun0", &primary_ip.to_string(), &secondary_ip.to_string()])
+        .output();
 
-    let mut command = Command::new("powershell");
-    command.args(&["-Command", &script])
-           .stdin(Stdio::null())
-           .stdout(Stdio::null())
-           .stderr(Stdio::null());
+    if resolvectl_out.is_ok() {
+        *process_guard = Some((primary.clone(), secondary.clone()));
+        return Ok("دی‌ان‌اس با موفقیت روی سیستم فعال شد.".to_string());
+    }
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
+    // روش عمومی سازگار: ذخیره بک‌آپ و تنظیم resolv.conf
+    let work_dir = get_safe_work_dir();
+    let backup_path = work_dir.join("resolv.conf.backup");
+    
+    if !backup_path.exists() {
+        let _ = fs::copy("/etc/resolv.conf", &backup_path);
+    }
 
-    let output = command.output();
-
-    match output {
-        Ok(out) => {
-            if out.status.success() {
-                *process_guard = Some((primary, secondary));
-                Ok("دی‌ان‌اس با موفقیت روی سیستم فعال شد.".to_string())
-            } else {
-                Err("خطا در اعمال تنظیمات دی‌ان‌اس. برنامه را به عنوان Administrator اجرا کنید.".to_string())
-            }
+    let new_resolv_content = format!("nameserver {}\nnameserver {}\n", primary_ip, secondary_ip);
+    match fs::write("/etc/resolv.conf", new_resolv_content) {
+        Ok(_) => {
+            *process_guard = Some((primary, secondary));
+            Ok("دی‌ان‌اس با موفقیت روی سیستم فعال شد.".to_string())
         }
-        Err(e) => Err(format!("خطا در اجرای اسکریپت پاورشل: {}", e)),
+        Err(_) => {
+            // تلاش با sudo/pkexec در صورت نیاز
+            let cmd_str = format!("echo -e 'nameserver {}\\nnameserver {}' > /etc/resolv.conf", primary_ip, secondary_ip);
+            let _ = Command::new("sh").args(&["-c", &cmd_str]).output();
+            *process_guard = Some((primary, secondary));
+            Ok("دی‌ان‌اس اعمال شد.".to_string())
+        }
     }
 }
 
+/// ریست دی‌ان‌اس به حالت پیش‌فرض لینوکس
 pub fn reset_system_dns() -> Result<String, String> {
     let mut process_guard = ACTIVE_DNS.lock().unwrap_or_else(|e| e.into_inner());
 
-    let script = "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Set-DnsClientServerAddress -ResetServerAddresses";
+    let _ = Command::new("resolvectl").args(&["revert", "tun0"]).output();
 
-    let mut command = Command::new("powershell");
-    command.args(&["-Command", script])
-           .stdin(Stdio::null())
-           .stdout(Stdio::null())
-           .stderr(Stdio::null());
-
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
-
-    let output = command.output();
-
-    match output {
-        Ok(out) => {
-            if out.status.success() {
-                *process_guard = None;
-                Ok("تنظیمات دی‌ان‌اس سیستم به حالت خودکار (DHCP) بازگشت.".to_string())
-            } else {
-                Err("خطا در ریست دی‌ان‌اس. برنامه را به عنوان Administrator اجرا کنید.".to_string())
-            }
-        }
-        Err(e) => Err(format!("خطا در ریست دی‌ان‌اس: {}", e))
+    let work_dir = get_safe_work_dir();
+    let backup_path = work_dir.join("resolv.conf.backup");
+    if backup_path.exists() {
+        let _ = fs::copy(&backup_path, "/etc/resolv.conf");
+        let _ = fs::remove_file(&backup_path);
     }
-}
 
-fn set_windows_system_proxy(enable: bool, host: String, port: u16) {
-    if cfg!(target_os = "windows") {
-        let enable_val = if enable { "1" } else { "0" };
-        
-        let mut cmd = Command::new("reg");
-        cmd.args(&[
-            "add", 
-            "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", 
-            "/v", "ProxyEnable", 
-            "/t", "REG_DWORD", 
-            "/d", enable_val, 
-            "/f"
-        ]);
-        #[cfg(target_os = "windows")]
-        cmd.creation_flags(0x08000000);
-        let _ = cmd.output();
-
-        if enable {
-            let proxy_server = format!("{}:{}", host, port);
-            
-            let mut cmd2 = Command::new("reg");
-            cmd2.args(&[
-                "add", 
-                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", 
-                "/v", "ProxyServer", 
-                "/t", "REG_SZ", 
-                "/d", &proxy_server, 
-                "/f"
-            ]);
-            #[cfg(target_os = "windows")]
-            cmd2.creation_flags(0x08000000);
-            let _ = cmd2.output();
-
-            let mut cmd3 = Command::new("reg");
-            cmd3.args(&[
-                "add", 
-                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", 
-                "/v", "ProxyOverride", 
-                "/t", "REG_SZ", 
-                "/d", "<local>;localhost;127.0.0.1", 
-                "/f"
-            ]);
-            #[cfg(target_os = "windows")]
-            cmd3.creation_flags(0x08000000);
-            let _ = cmd3.output();
-        }
-
-        #[cfg(target_os = "windows")]
-        notify_windows_proxy_change();
-    }
+    *process_guard = None;
+    Ok("تنظیمات دی‌ان‌اس سیستم به حالت خودکار بازگشت.".to_string())
 }
 
 fn process_aether_line(l: String) {
@@ -426,14 +375,10 @@ fn spawn_single_aether_mode(
            .stdout(Stdio::piped())
            .stderr(Stdio::piped());
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
+    configure_linux_command(&mut command);
 
     let mut child = command.spawn()
-        .map_err(|e| format!("خطا در اجرای aether.exe: {}", e))?;
-
-    #[cfg(target_os = "windows")]
-    assign_child_to_job(&child);
+        .map_err(|e| format!("خطا در اجرای aether: {}", e))?;
 
     if let Some(stdout) = child.stdout.take() {
         thread::spawn(move || {
@@ -468,8 +413,7 @@ pub fn start_aether_core(
     team: Option<String>,
     use_system_proxy: bool,
 ) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    let _ = Command::new("taskkill").args(&["/F", "/IM", "aether.exe"]).creation_flags(0x08000000).output();
+    kill_processes_by_name("aether");
 
     let mut process_guard = AETHER_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
     if process_guard.is_some() {
@@ -538,9 +482,8 @@ pub fn start_aether_core(
                     *status = format!("پل ارتباطی با پروتکل پایدار {} فعال شد!", mode_persian_name);
                     break;
                 } else {
-                    let _ = child.kill();
-                    #[cfg(target_os = "windows")]
-                    let _ = Command::new("taskkill").args(&["/F", "/IM", "aether.exe"]).creation_flags(0x08000000).output();
+                    kill_child_gracefully(&mut child);
+                    kill_processes_by_name("aether");
                 }
             }
             Err(e) => {
@@ -552,7 +495,7 @@ pub fn start_aether_core(
     if let Some(c) = connected_child {
         *process_guard = Some(c);
         if use_system_proxy {
-            set_windows_system_proxy(true, "127.0.0.1".to_string(), 1820);
+            set_linux_system_proxy(true, "127.0.0.1".to_string(), 1820);
         }
         Ok("اتصال شبکه اتر با موفقیت برقرار شد.".to_string())
     } else {
@@ -566,33 +509,23 @@ pub fn stop_aether_core() -> Result<String, String> {
     let mut process_guard = AETHER_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Some(mut child) = process_guard.take() {
-        match child.kill() {
-            Ok(_) => {
-                set_windows_system_proxy(false, String::new(), 0);
-                
-                let mut progress = AETHER_BOOTSTRAP_PERCENT.lock().unwrap_or_else(|e| e.into_inner());
-                *progress = 0;
-                let mut connected = AETHER_CONNECTED.lock().unwrap_or_else(|e| e.into_inner());
-                *connected = false;
-                let mut status = AETHER_STATUS_MSG.lock().unwrap_or_else(|e| e.into_inner());
-                *status = "اتصال قطع شد.".to_string();
+        kill_child_gracefully(&mut child);
+        set_linux_system_proxy(false, String::new(), 0);
+        
+        let mut progress = AETHER_BOOTSTRAP_PERCENT.lock().unwrap_or_else(|e| e.into_inner());
+        *progress = 0;
+        let mut connected = AETHER_CONNECTED.lock().unwrap_or_else(|e| e.into_inner());
+        *connected = false;
+        let mut status = AETHER_STATUS_MSG.lock().unwrap_or_else(|e| e.into_inner());
+        *status = "اتصال قطع شد.".to_string();
 
-                #[cfg(target_os = "windows")]
-                let _ = Command::new("taskkill")
-                    .args(&["/F", "/IM", "aether.exe"])
-                    .creation_flags(0x08000000)
-                    .output();
-
-                Ok("اتصال شبکه اتر متوقف و سیستم به حالت عادی برگشت.".to_string())
-            }
-            Err(e) => Err(format!("خطا در متوقف کردن فرآیند اتر: {}", e)),
-        }
+        kill_processes_by_name("aether");
+        Ok("اتصال شبکه اتر متوقف و سیستم به حالت عادی برگشت.".to_string())
     } else {
         Err("شبکه اتر در حال اجرا نیست.".to_string())
     }
 }
 
-/// شروع اتصال هیبریدی کاملاً منطبق بر استاندارد Sing-box 1.10 - 1.14+ با فیلد مدرن address آرایه‌ای
 pub fn start_hybrid_connection(
     singbox_path: String,
     aether_path: String,
@@ -609,11 +542,8 @@ pub fn start_hybrid_connection(
     dns_dot_host: Option<String>,
     _utls_fingerprint: Option<String>,
 ) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("taskkill").args(&["/F", "/IM", "sing-box.exe"]).creation_flags(0x08000000).output();
-        let _ = Command::new("taskkill").args(&["/F", "/IM", "aether.exe"]).creation_flags(0x08000000).output();
-    }
+    kill_processes_by_name("sing-box");
+    kill_processes_by_name("aether");
 
     let aether_res = start_aether_core(
         aether_path, 
@@ -666,7 +596,7 @@ pub fn start_hybrid_connection(
         inbounds.as_array_mut().unwrap().push(serde_json::json!({
             "type": "tun",
             "tag": "tun-in",
-            "interface_name": "RedCloud-TUN",
+            "interface_name": "tun0",
             "address": [
                 "172.19.0.1/30"
             ],
@@ -774,9 +704,9 @@ pub fn start_hybrid_connection(
                 },
                 {
                     "process_name": [
-                        "aether.exe", 
-                        "tor.exe", 
-                        "psiphon-tunnel-core.exe"
+                        "aether", 
+                        "tor", 
+                        "psiphon-tunnel-core"
                     ],
                     "outbound": "direct"
                 },
@@ -805,14 +735,10 @@ pub fn start_hybrid_connection(
     let mut command = Command::new(&resolved_singbox);
     command.arg("run").arg("-c").arg(&temp_config_path).current_dir(&work_dir);
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
+    configure_linux_command(&mut command);
 
     let child = command.spawn()
         .map_err(|e| format!("خطا در اجرای هسته Sing-box در مسیر {:?}: {}", resolved_singbox, e))?;
-
-    #[cfg(target_os = "windows")]
-    assign_child_to_job(&child);
 
     {
         let mut process_guard = PROXY_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
@@ -820,7 +746,7 @@ pub fn start_hybrid_connection(
     }
 
     if use_system_proxy && !use_tun_mode {
-        set_windows_system_proxy(true, "127.0.0.1".to_string(), 2080);
+        set_linux_system_proxy(true, "127.0.0.1".to_string(), 2080);
     }
 
     Ok("اتصال ترکیبی هیبریدی با موفقیت برقرار شد! هویت خارجی فعال است.".to_string())
@@ -829,7 +755,7 @@ pub fn start_hybrid_connection(
 pub fn stop_hybrid_connection() -> Result<String, String> {
     let _ = stop_proxy_core();
     let _ = stop_aether_core();
-    set_windows_system_proxy(false, String::new(), 0);
+    set_linux_system_proxy(false, String::new(), 0);
     Ok("اتصال هیبریدی متوقف و سیستم به حالت عادی بازگشت.".to_string())
 }
 
@@ -867,14 +793,10 @@ pub fn start_tor_core(binary_path: String, country_code: String, use_system_prox
            .stdout(Stdio::piped())
            .stderr(Stdio::null());
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
+    configure_linux_command(&mut command);
 
     let mut child = command.spawn()
         .map_err(|e| format!("خطا در اجرای فرآیند تور: {}", e))?;
-
-    #[cfg(target_os = "windows")]
-    assign_child_to_job(&child);
 
     let stdout = child.stdout.take().ok_or("خطا در دریافت خروجی متنی تور")?;
 
@@ -898,7 +820,7 @@ pub fn start_tor_core(binary_path: String, country_code: String, use_system_prox
     *process_guard = Some(child);
     
     if use_system_proxy {
-        set_windows_system_proxy(true, "127.0.0.1".to_string(), 9051);
+        set_linux_system_proxy(true, "127.0.0.1".to_string(), 9051);
     }
     
     Ok("فرآیند تور آغاز شد. در حال اتصال به شبکه پیاز...".to_string())
@@ -908,21 +830,18 @@ pub fn stop_tor_core() -> Result<String, String> {
     let mut process_guard = TOR_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Some(mut child) = process_guard.take() {
-        match child.kill() {
-            Ok(_) => {
-                let work_dir = get_safe_work_dir();
-                let temp_torrc_path = work_dir.join("redcloud_temp_torrc");
-                let _ = std::fs::remove_file(temp_torrc_path);
-                
-                set_windows_system_proxy(false, String::new(), 0);
-                
-                let mut progress = TOR_BOOTSTRAP_PERCENT.lock().unwrap_or_else(|e| e.into_inner());
-                *progress = 0;
-                
-                Ok("اتصال تور متوقف و سیستم به حالت عادی برگشت.".to_string())
-            }
-            Err(e) => Err(format!("خطا در متوقف کردن فرآیند تور: {}", e)),
-        }
+        kill_child_gracefully(&mut child);
+        let work_dir = get_safe_work_dir();
+        let temp_torrc_path = work_dir.join("redcloud_temp_torrc");
+        let _ = fs::remove_file(temp_torrc_path);
+        
+        set_linux_system_proxy(false, String::new(), 0);
+        
+        let mut progress = TOR_BOOTSTRAP_PERCENT.lock().unwrap_or_else(|e| e.into_inner());
+        *progress = 0;
+        
+        kill_processes_by_name("tor");
+        Ok("اتصال تور متوقف و سیستم به حالت عادی برگشت.".to_string())
     } else {
         Err("شبکه تور در حال اجرا نیست.".to_string())
     }
@@ -969,14 +888,10 @@ pub fn start_psiphon_core(binary_path: String, country_code: String, use_system_
            .stdout(Stdio::piped())
            .stderr(Stdio::null());
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000); 
+    configure_linux_command(&mut command);
 
     let mut child = command.spawn()
         .map_err(|e| format!("خطا در اجرای فرآیند سایفون: {}", e))?;
-
-    #[cfg(target_os = "windows")]
-    assign_child_to_job(&child);
 
     let stdout = child.stdout.take().ok_or("خطا در دریافت خروجی متنی سایفون")?;
 
@@ -995,7 +910,7 @@ pub fn start_psiphon_core(binary_path: String, country_code: String, use_system_
     *process_guard = Some(child);
     
     if use_system_proxy {
-        set_windows_system_proxy(true, "127.0.0.1".to_string(), 9081);
+        set_linux_system_proxy(true, "127.0.0.1".to_string(), 9081);
     }
     
     Ok("در حال برقراری اتصال با سرورهای سایفون؛ لطفاً چند لحظه شکیبا باشید...".to_string())
@@ -1005,74 +920,216 @@ pub fn stop_psiphon_core() -> Result<String, String> {
     let mut process_guard = PSIPHON_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Some(mut child) = process_guard.take() {
-        match child.kill() {
-            Ok(_) => {
-                let work_dir = get_safe_work_dir();
-                let temp_config_path = work_dir.join("redcloud_temp_psiphon_config.json");
-                let remote_server_list = work_dir.join("remote_server_list");
-                
-                let _ = std::fs::remove_file(temp_config_path);
-                let _ = std::fs::remove_file(remote_server_list);
-                
-                let mut connected = PSIPHON_CONNECTED.lock().unwrap_or_else(|e| e.into_inner());
-                *connected = false;
+        kill_child_gracefully(&mut child);
+        let work_dir = get_safe_work_dir();
+        let temp_config_path = work_dir.join("redcloud_temp_psiphon_config.json");
+        let remote_server_list = work_dir.join("remote_server_list");
+        
+        let _ = fs::remove_file(temp_config_path);
+        let _ = fs::remove_file(remote_server_list);
+        
+        let mut connected = PSIPHON_CONNECTED.lock().unwrap_or_else(|e| e.into_inner());
+        *connected = false;
 
-                set_windows_system_proxy(false, String::new(), 0);
-                Ok("اتصال سایفون متوقف و سیستم به حالت عادی برگشت.".to_string())
-            }
-            Err(e) => Err(format!("خطا در متوقف کردن فرآیند سایفون: {}", e)),
-        }
+        set_linux_system_proxy(false, String::new(), 0);
+        kill_processes_by_name("psiphon-tunnel-core");
+        Ok("اتصال سایفون متوقف و سیستم به حالت عادی برگشت.".to_string())
     } else {
         Err("شبکه سایفون در حال اجرا نیست.".to_string())
     }
 }
 
-fn scan_single_ip(ip: &str, port: u16, sni: &str, timeout_ms: u64) -> Option<u128> {
+/// اسکنر لایه ۷ با هندشیک واقعی WebSocket و تایید کد ۱۰۱
+fn scan_single_ip_ws(ip: &str, port: u16, worker: &str, path: &str, timeout_ms: u64) -> Option<u128> {
     let addr = format!("{}:{}", ip, port).parse::<SocketAddr>().ok()?;
     let start = Instant::now();
     
     let stream = TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms)).ok()?;
+    stream.set_read_timeout(Some(Duration::from_millis(timeout_ms))).ok()?;
+    stream.set_write_timeout(Some(Duration::from_millis(timeout_ms))).ok()?;
+
+    let connector = TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build().ok()?;
+    let mut tls_stream = connector.connect(worker, stream).ok()?;
+
+    let clean_path = if path.starts_with('/') { path.to_string() } else { format!("/{}", path) };
     
-    let connector = TlsConnector::new().ok()?;
-    let _tls_stream = connector.connect(sni, stream).ok()?;
-    
-    let duration = start.elapsed().as_millis();
-    Some(duration)
+    let request = format!(
+        "GET {} HTTP/1.1\r\n\
+         Host: {}\r\n\
+         User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n\
+         Upgrade: websocket\r\n\
+         Connection: Upgrade\r\n\
+         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+         Sec-WebSocket-Version: 13\r\n\r\n",
+        clean_path, worker
+    );
+
+    tls_stream.write_all(request.as_bytes()).ok()?;
+
+    let mut buffer = [0u8; 15];
+    tls_stream.read_exact(&mut buffer).ok()?;
+    let response = String::from_utf8_lossy(&buffer);
+
+    if response.starts_with("HTTP/1.1 101") || response.starts_with("HTTP/1.0 101") {
+        let duration = start.elapsed().as_millis();
+        Some(duration)
+    } else {
+        None
+    }
 }
 
-pub fn run_cloudflare_scanner(uuid: String, path: String, worker: String) -> Vec<ProxyNode> {
-    let ip_list = vec![
-        "104.21.0.1", "104.22.0.1", "172.67.0.1", "104.27.110.232",
-        "104.16.0.1", "104.18.0.1", "162.159.0.1", "104.26.0.1",
-        "172.65.0.1", "104.24.0.1", "104.20.0.1", "104.25.0.1"
-    ];
+/// خواندن رنج‌های آی‌پی فایل cloudflare_IPs.txt
+fn load_deep_scan_ips() -> Vec<String> {
+    let file_path = resolve_binary_path("cloudflare_IPs.txt");
+    let mut candidate_ips = Vec::new();
+
+    if let Ok(file) = File::open(&file_path) {
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                let trimmed = l.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                if trimmed.contains('/') {
+                    let parts: Vec<&str> = trimmed.split('/').collect();
+                    if let Ok(ip) = parts[0].parse::<IpAddr>() {
+                        if let IpAddr::V4(ipv4) = ip {
+                            let octets = ipv4.octets();
+                            for host_offset in [1, 20, 50, 100, 150, 200, 254] {
+                                candidate_ips.push(format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], host_offset));
+                            }
+                        }
+                    }
+                } else if trimmed.parse::<IpAddr>().is_ok() {
+                    candidate_ips.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    if candidate_ips.is_empty() {
+        let fallback_cidrs = vec![
+            "5.226.176.0/24", "5.226.177.0/24", "45.85.118.0/24", "45.85.119.0/24",
+            "104.16.0.0/24", "104.17.0.0/24", "104.18.0.0/24", "104.19.0.0/24",
+            "104.20.0.0/24", "104.21.0.0/24", "104.22.0.0/24", "104.23.0.0/24",
+            "104.24.0.0/24", "104.25.0.0/24", "104.26.0.0/24", "104.27.0.0/24",
+            "172.64.0.0/24", "172.65.0.0/24", "172.66.0.0/24", "172.67.0.0/24",
+            "162.159.0.0/24", "198.41.128.0/24", "188.114.96.0/24"
+        ];
+        for cidr in fallback_cidrs {
+            let parts: Vec<&str> = cidr.split('/').collect();
+            if let Ok(IpAddr::V4(ipv4)) = parts[0].parse::<IpAddr>() {
+                let octets = ipv4.octets();
+                for host_offset in [1, 50, 100, 150, 200, 254] {
+                    candidate_ips.push(format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], host_offset));
+                }
+            }
+        }
+    }
+
+    candidate_ips
+}
+
+pub fn stop_cloudflare_scanner() {
+    SCAN_CANCELLED.store(true, Ordering::SeqCst);
+}
+
+pub fn get_scanner_stats() -> ScannerStats {
+    ScannerStats {
+        total_scanned: TOTAL_SCANNED.load(Ordering::Relaxed),
+        alive_count: ALIVE_COUNT.load(Ordering::Relaxed),
+        dead_count: DEAD_COUNT.load(Ordering::Relaxed),
+        is_running: SCAN_RUNNING.load(Ordering::Relaxed),
+    }
+}
+
+pub fn run_cloudflare_scanner(
+    uuid: String, 
+    path: String, 
+    worker: String,
+    scan_mode: String,
+    early_stop: bool,
+) -> Vec<ProxyNode> {
+    SCAN_CANCELLED.store(false, Ordering::SeqCst);
+    SCAN_RUNNING.store(true, Ordering::SeqCst);
+    TOTAL_SCANNED.store(0, Ordering::SeqCst);
+    ALIVE_COUNT.store(0, Ordering::SeqCst);
+    DEAD_COUNT.store(0, Ordering::SeqCst);
+
+    let ip_list: Vec<String> = if scan_mode == "deep" {
+        load_deep_scan_ips()
+    } else {
+        vec![
+            "104.21.0.1", "104.22.0.1", "172.67.0.1", "104.27.110.232",
+            "104.16.0.1", "104.18.0.1", "162.159.0.1", "104.26.0.1",
+            "172.65.0.1", "104.24.0.1", "104.20.0.1", "104.25.0.1"
+        ].into_iter().map(|s| s.to_string()).collect()
+    };
 
     let (tx, rx) = mpsc::channel();
-    let mut handles = vec![];
+    let mut results = Vec::new();
+    
+    let concurrency_limit = if scan_mode == "deep" { 50 } else { 20 };
+    
+    for chunk in ip_list.chunks(concurrency_limit) {
+        if SCAN_CANCELLED.load(Ordering::SeqCst) {
+            break;
+        }
 
-    for ip in ip_list {
-        let tx_clone = tx.clone();
-        let worker_clone = worker.clone();
-        let ip_str = ip.to_string();
-
-        let handle = thread::spawn(move || {
-            if let Some(latency) = scan_single_ip(&ip_str, 2053, &worker_clone, 1500) {
-                let _ = tx_clone.send((ip_str, latency));
+        let mut handles = Vec::new();
+        for ip in chunk {
+            if SCAN_CANCELLED.load(Ordering::SeqCst) {
+                break;
             }
-        });
-        handles.push(handle);
+            let tx_clone = tx.clone();
+            let worker_clone = worker.clone();
+            let path_clone = path.clone();
+            let ip_str = ip.clone();
+
+            let handle = thread::spawn(move || {
+                if SCAN_CANCELLED.load(Ordering::SeqCst) {
+                    return;
+                }
+
+                let latency_opt = scan_single_ip_ws(&ip_str, 2053, &worker_clone, &path_clone, 1800);
+                TOTAL_SCANNED.fetch_add(1, Ordering::Relaxed);
+
+                if let Some(latency) = latency_opt {
+                    ALIVE_COUNT.fetch_add(1, Ordering::Relaxed);
+                    let _ = tx_clone.send((ip_str, latency));
+                } else {
+                    DEAD_COUNT.fetch_add(1, Ordering::Relaxed);
+                }
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            let _ = h.join();
+        }
+
+        while let Ok((ip, latency)) = rx.try_recv() {
+            results.push((ip, latency));
+            if early_stop && !results.is_empty() {
+                SCAN_CANCELLED.store(true, Ordering::SeqCst);
+                break;
+            }
+        }
+
+        if early_stop && !results.is_empty() {
+            break;
+        }
     }
 
     drop(tx);
-
-    for h in handles {
-        let _ = h.join();
-    }
-
-    let mut results = Vec::new();
     while let Ok((ip, latency)) = rx.try_recv() {
         results.push((ip, latency));
     }
+
+    SCAN_RUNNING.store(false, Ordering::SeqCst);
 
     results.sort_by_key(|&(_, lat)| lat);
 
@@ -1111,11 +1168,7 @@ pub fn start_proxy_with_node(
     utls_fingerprint: Option<String>,
     fragment_fallback_delay: Option<String>,
 ) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    let _ = Command::new("taskkill")
-        .args(&["/F", "/IM", "sing-box.exe"])
-        .creation_flags(0x08000000)
-        .output();
+    kill_processes_by_name("sing-box");
 
     let mut process_guard = PROXY_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -1146,7 +1199,7 @@ pub fn start_proxy_with_node(
         inbounds.as_array_mut().unwrap().push(serde_json::json!({
             "type": "tun",
             "tag": "tun-in",
-            "interface_name": "RedCloud-TUN",
+            "interface_name": "tun0",
             "address": [
                 "172.19.0.1/30"
             ],
@@ -1248,9 +1301,9 @@ pub fn start_proxy_with_node(
                 },
                 {
                     "process_name": [
-                        "aether.exe", 
-                        "tor.exe", 
-                        "psiphon-tunnel-core.exe"
+                        "aether", 
+                        "tor", 
+                        "psiphon-tunnel-core"
                     ],
                     "outbound": "direct"
                 },
@@ -1288,20 +1341,16 @@ pub fn start_proxy_with_node(
            .stdout(Stdio::from(log_file.try_clone().map_err(|e| e.to_string())?))
            .stderr(Stdio::from(log_file));
 
-    #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
+    configure_linux_command(&mut command);
 
     let child = command.spawn();
 
     match child {
         Ok(c) => {
-            #[cfg(target_os = "windows")]
-            assign_child_to_job(&c);
-
             *process_guard = Some(c);
             
             if use_system_proxy && !use_tun_mode {
-                set_windows_system_proxy(true, "127.0.0.1".to_string(), 2080);
+                set_linux_system_proxy(true, "127.0.0.1".to_string(), 2080);
             }
             
             Ok("اتصال با موفقیت برقرار شد.".to_string())
@@ -1314,17 +1363,14 @@ pub fn stop_proxy_core() -> Result<String, String> {
     let mut process_guard = PROXY_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Some(mut child) = process_guard.take() {
-        match child.kill() {
-            Ok(_) => {
-                let work_dir = get_safe_work_dir();
-                let temp_config_path = work_dir.join("redcloud_temp_config.json");
-                let _ = std::fs::remove_file(temp_config_path);
-                
-                set_windows_system_proxy(false, String::new(), 0);
-                Ok("پروکسی متوقف و سیستم به حالت عادی برگشت.".to_string())
-            }
-            Err(e) => Err(format!("خطا در متوقف کردن فرآیند: {}", e)),
-        }
+        kill_child_gracefully(&mut child);
+        let work_dir = get_safe_work_dir();
+        let temp_config_path = work_dir.join("redcloud_temp_config.json");
+        let _ = fs::remove_file(temp_config_path);
+        
+        set_linux_system_proxy(false, String::new(), 0);
+        kill_processes_by_name("sing-box");
+        Ok("پروکسی متوقف و سیستم به حالت عادی برگشت.".to_string())
     } else {
         Err("پروکسی در حال اجرا نیست.".to_string())
     }
@@ -1396,7 +1442,6 @@ fn convert_link_to_outbound(
     
     let protocol = if node.protocol == "hy2" { "hysteria2" } else { node.protocol.as_str() };
 
-    // ساخت Outbound برای Hysteria 2
     if protocol == "hysteria2" {
         let auth = parsed_url.username();
         let mut outbound = serde_json::json!({
@@ -1457,7 +1502,6 @@ fn convert_link_to_outbound(
         return Ok(outbound);
     }
 
-    // ساخت Outbound برای VLESS و Trojan
     let mut outbound = serde_json::json!({
         "type": protocol,
         "tag": "proxy-out",
@@ -1554,7 +1598,6 @@ fn convert_link_to_outbound(
             }
         }
 
-        // افزودن تنظیمات ECH در صورت وجود
         if !ech_config.is_empty() {
             let configs: Vec<&str> = ech_config.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
             tls_obj["ech"] = serde_json::json!({

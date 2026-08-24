@@ -844,12 +844,12 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "flutter_rust_bridge",
+ "libc",
  "native-tls",
  "serde",
  "serde_json",
  "url",
  "urlencoding",
- "windows-sys 0.59.0",
 ]
 
 [[package]]

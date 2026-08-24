@@ -43,6 +43,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ProxyNode dco_decode_proxy_node(dynamic raw);
 
   @protected
+  ScannerStats dco_decode_scanner_stats(dynamic raw);
+
+  @protected
   int dco_decode_u_16(dynamic raw);
 
   @protected
@@ -74,6 +77,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProxyNode sse_decode_proxy_node(SseDeserializer deserializer);
+
+  @protected
+  ScannerStats sse_decode_scanner_stats(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -116,6 +122,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_proxy_node(ProxyNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_scanner_stats(ScannerStats self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
