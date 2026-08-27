@@ -15,7 +15,7 @@ const String managerWorkerUrl = "https://round-sea-8418.redcloudir.workers.dev";
 const String appCurrentVersion = "3.5";
 const String telegramChannelUrl = "https://t.me/DevTaha_project";
 const String usdtBnbAddress = "0xDeda28Aa73Ec089A77B3fC616E0011a8fce12900";
-const String githubRepoReleasesUrl = "https://github.com/Devtahas/RedCloud-windows/releases/latest";
+const String githubRepoReleasesUrl = "https://github.com/Devtahas/RedCloud-linux/releases/latest";
 
 void openBrowserUrl(String url) {
   if (Platform.isLinux) {
@@ -639,7 +639,7 @@ class _MainLayoutContentState extends State<MainLayoutContent> with WindowListen
     setState(() => _isCheckingUpdate = true);
     try {
       final response = await http.get(
-        Uri.parse('https://api.github.com/repos/Devtahas/RedCloud-windows/releases/latest'),
+        Uri.parse('https://api.github.com/repos/Devtahas/RedCloud-linux/releases/latest'),
         headers: {'User-Agent': 'RedCloud-Client'},
       ).timeout(const Duration(seconds: 7));
 
