@@ -885,7 +885,7 @@ pub fn start_hybrid_connection(
 
     let dns_rules = vec![
         serde_json::json!({
-            "outbound": ["any"],
+            "query_type": ["A", "AAAA"],
             "server": "dns_proxy"
         })
     ];
@@ -974,6 +974,7 @@ pub fn start_hybrid_connection(
     let resolved_singbox = resolve_binary_path(&singbox_path);
     let mut command = Command::new(&resolved_singbox);
     command.arg("run").arg("-c").arg(&temp_config_path).current_dir(&work_dir);
+    command.env("ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM", "true");
 
     #[cfg(target_os = "linux")]
     configure_linux_child_lifecycle(&mut command);
@@ -1759,7 +1760,7 @@ pub fn start_proxy_with_node(
 
     let dns_rules = vec![
         serde_json::json!({
-            "outbound": ["any"],
+            "query_type": ["A", "AAAA"],
             "server": "dns_proxy"
         })
     ];
@@ -1843,6 +1844,7 @@ pub fn start_proxy_with_node(
     let mut command = Command::new(&resolved_path);
     command.arg("run").arg("-c").arg(&temp_config_path)
            .current_dir(&work_dir);
+    command.env("ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM", "true");
 
     let log_file_path = work_dir.join("redcloud_sing_box_log.txt");
     let log_file = File::create(&log_file_path)
