@@ -1,0 +1,47 @@
+name: client
+description: "RedCloud Anti-Censorship Client for Linux"
+publish_to: 'none'
+
+version: 3.5.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  
+  # اتصال به کریت محلی Rust
+  rust_lib_client:
+    path: rust_builder
+  flutter_rust_bridge: 2.12.0
+  
+  # ارتباطات شبکه
+  http: ^1.6.0
+  
+  # مدیریت پنجره در دسکتاپ لینوکس (X11 و Wayland)
+  window_manager: ^0.5.1
+  
+  # آیکون و منوی کنار ساعت در لینوکس (AppIndicator / StatusNotifierItem)
+  tray_manager: ^0.5.3
+  
+  # دسترسی به دایرکتوری‌های استاندارد لینوکس (XDG Base Directory: ~/.config و ~/.local/share)
+  path_provider: ^2.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  # تعریف پوشه فایل‌های گرافیکی و آیکون‌ها برای لینوکس
+  assets:
+    - assets/
+    - assets/app_icon.png
+    - assets/app_icon.ico

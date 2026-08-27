@@ -1,0 +1,52 @@
+# ============================================
+# ۱. فایل‌های بیلد و پوشه‌های موقت فلاتر و اندروید
+# ============================================
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+android/build/
+android/.gradle/
+android/app/build/
+
+# ============================================
+# ۲. فایل‌های خروجی و بیلد Rust
+# ============================================
+target/
+rust/target/
+rust_builder/target/
+rust_builder/cargokit/target/
+
+# ============================================
+# ۳. باینری‌های اجرایی و فایل‌های نصبی سنگین
+# ============================================
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+*.tar
+RedCloud_Setup*
+RedCloud_VPN_Setup*
+
+# هسته‌ها (توسط GitHub Actions دانلود می‌شوند)
+sing-box
+aether
+tor
+psiphon-tunnel-core
+ca.psiphon.PsiphonTunnel.tunnel-core
+wintun.dll
+geoip-plus-asn
+geoip6-plus-asn
+
+# ============================================
+# ۴. فایل‌های کانفیگ محیط توسعه و IDE
+# ============================================
+.idea/
+.vscode/
+*.iml
+*.log
+saved_nodes.json
+redcloud_temp_*
