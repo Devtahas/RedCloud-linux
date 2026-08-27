@@ -109,7 +109,7 @@ jobs:
           [ -f cloudflare_IPs.txt ] && cp cloudflare_IPs.txt package/redcloud/ || true
           [ -f DNS.txt ] && cp DNS.txt package/redcloud/ || true
 
-          # ساخت اسکریپت نصب اختصاصی با تنظیم دسترسی‌ها
+          # ساخت اسکریپت نصب اختصاصی با تنظیم دسترسی‌ها و LD_LIBRARY_PATH
           cat << 'EOF' > package/redcloud/install.sh
           #!/usr/bin/env bash
           set -e
@@ -134,11 +134,12 @@ jobs:
               setcap cap_net_admin,cap_net_bind_service=+ep "$INSTALL_DIR/client" 2>/dev/null || true
           fi
 
-          # ساخت دستور سراسری در ترمینال
+          # ساخت دستور سراسری در ترمینال با معرفی مسیر کتابخانه‌های لینوکس (LD_LIBRARY_PATH)
           cat << 'IN_EOF' > /usr/local/bin/redcloud
           #!/usr/bin/env bash
+          export LD_LIBRARY_PATH="/opt/redcloud/lib:${LD_LIBRARY_PATH}"
           cd /opt/redcloud
-          exec ./client "$@"
+          exec /opt/redcloud/client "$@"
           IN_EOF
           chmod +x /usr/local/bin/redcloud
 
