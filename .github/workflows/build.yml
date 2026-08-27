@@ -109,7 +109,7 @@ jobs:
           [ -f cloudflare_IPs.txt ] && cp cloudflare_IPs.txt package/redcloud/ || true
           [ -f DNS.txt ] && cp DNS.txt package/redcloud/ || true
 
-          # ساخت اسکریپت نصب اختصاصی با تنظیم دسترسی‌ها و LD_LIBRARY_PATH
+          # ساخت اسکریپت نصب اختصاصی با ثبت دائم کتابخانه‌ها در سیستم
           cat << 'EOF' > package/redcloud/install.sh
           #!/usr/bin/env bash
           set -e
@@ -127,17 +127,18 @@ jobs:
           # اعطای دسترسی اجرایی به کلیه هسته‌ها
           chmod +x "$INSTALL_DIR/client" "$INSTALL_DIR/sing-box" "$INSTALL_DIR/aether" "$INSTALL_DIR/psiphon-tunnel-core" "$INSTALL_DIR/tor" 2>/dev/null || true
 
-          # تنظیم قابلیت‌های دائمی کرنل برای کارت شبکه مجازی TUN
+          # ثبت دائم پوشه کتابخانه‌های فلاتر در سیستم لینوکس
+          echo "$INSTALL_DIR/lib" > /etc/ld.so.conf.d/redcloud.conf
+          ldconfig
+
+          # تنظیم قابلیت‌های دائمی کرنل فقط روی هسته sing-box برای کارت شبکه مجازی TUN
           if command -v setcap >/dev/null 2>&1; then
               setcap cap_net_admin,cap_net_bind_service=+ep "$INSTALL_DIR/sing-box" 2>/dev/null || true
-              setcap cap_net_admin,cap_net_bind_service=+ep "$INSTALL_DIR/aether" 2>/dev/null || true
-              setcap cap_net_admin,cap_net_bind_service=+ep "$INSTALL_DIR/client" 2>/dev/null || true
           fi
 
-          # ساخت دستور سراسری در ترمینال با معرفی مسیر کتابخانه‌های لینوکس (LD_LIBRARY_PATH)
+          # ساخت دستور سراسری در ترمینال
           cat << 'IN_EOF' > /usr/local/bin/redcloud
           #!/usr/bin/env bash
-          export LD_LIBRARY_PATH="/opt/redcloud/lib:${LD_LIBRARY_PATH}"
           cd /opt/redcloud
           exec /opt/redcloud/client "$@"
           IN_EOF

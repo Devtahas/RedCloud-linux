@@ -1406,26 +1406,37 @@ class _MainLayoutContentState extends State<MainLayoutContent> with WindowListen
   }
 
   Future<void> _initSystemTray() async {
-    String iconPath = 'assets/app_icon.png';
-    
-    if (kReleaseMode) {
-      final String exePath = Platform.resolvedExecutable;
-      final String exeDir = exePath.substring(0, exePath.lastIndexOf('/'));
-      final potentialPath = '$exeDir/data/flutter_assets/assets/app_icon.png';
-      if (File(potentialPath).existsSync()) {
-        iconPath = potentialPath;
+    try {
+      String iconPath = 'assets/app_icon.png';
+      
+      if (kReleaseMode) {
+        final String exePath = Platform.resolvedExecutable;
+        final separator = Platform.isWindows ? '\\' : '/';
+        final String exeDir = exePath.substring(0, exePath.lastIndexOf(separator));
+        final potentialPath = '$exeDir/data/flutter_assets/assets/app_icon.png';
+        if (File(potentialPath).existsSync()) {
+          iconPath = potentialPath;
+        }
       }
+
+      await trayManager.setIcon(iconPath); 
+      
+      // متد setToolTip فقط در ویندوز پشتیبانی می‌شود
+      if (Platform.isWindows) {
+        await trayManager.setToolTip('RedCloud VPN');
+      } else if (Platform.isLinux) {
+        await trayManager.setTitle('RedCloud VPN');
+      }
+
+      List<MenuItem> items = [
+        MenuItem(key: 'show_window', label: 'باز کردن برنامه'),
+        MenuItem.separator(),
+        MenuItem(key: 'exit_app', label: 'خروج کامل'),
+      ];
+      await trayManager.setContextMenu(Menu(items: items));
+    } catch (e) {
+      debugPrint("System Tray Warning (Ignored): $e");
     }
-
-    await trayManager.setIcon(iconPath); 
-    await trayManager.setToolTip('RedCloud VPN (Linux)');
-
-    List<MenuItem> items = [
-      MenuItem(key: 'show_window', label: 'باز کردن برنامه'),
-      MenuItem.separator(),
-      MenuItem(key: 'exit_app', label: 'خروج کامل'),
-    ];
-    await trayManager.setContextMenu(Menu(items: items));
   }
 
   @override
