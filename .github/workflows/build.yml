@@ -17,11 +17,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Linux Build Dependencies & ImageMagick
+      - name: Install Linux Build Dependencies & Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev libayatana-appindicator3-dev libglib2.0-dev liblzma-dev libcap2-bin curl tar zip imagemagick
+            libgtk-3-dev libayatana-appindicator3-dev libglib2.0-dev liblzma-dev libcap2-bin curl tar zip imagemagick tor tor-geoipdb
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -40,7 +40,6 @@ jobs:
           flutter config --enable-linux-desktop
           flutter create --platforms=linux .
 
-      # تبدیل خودکار آیکون ico به png برای برطرف شدن خطای Asset فلاتر
       - name: Generate Linux PNG Icon from ICO
         run: |
           mkdir -p assets
@@ -48,7 +47,6 @@ jobs:
             echo "Converting app_icon.ico to app_icon.png..."
             convert -background none "assets/app_icon.ico[0]" assets/app_icon.png || true
           fi
-          # ساخت آیکون رزرو در صورت نبود فایل اصلی
           if [ ! -f assets/app_icon.png ]; then
             echo "Generating fallback PNG icon..."
             convert -size 256x256 xc:#00D2FF assets/app_icon.png || true
@@ -63,7 +61,7 @@ jobs:
       - name: Build Linux Application (Release Mode)
         run: flutter build linux --release
 
-      - name: Download Official Core Binaries (All 4 Upstream Sources)
+      - name: Download and Prepare Official Core Binaries
         run: |
           # ۱. دانلود نسخه دقیق sing-box 1.13.13 لینوکس
           echo "Downloading official sing-box 1.13.13..."
@@ -85,15 +83,12 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/linux/psiphon-tunnel-core-x86_64 -o psiphon-tunnel-core
           chmod +x psiphon-tunnel-core
 
-          # ۴. دانلود هسته رسمی Tor Expert Bundle لینوکس همراه با GeoIP
-          echo "Downloading official Tor Expert Bundle for Linux..."
-          curl -fsSL https://archive.torproject.org/tor-package-archive/torbrowser/14.0.8/tor-expert-bundle-linux-x86_64-14.0.8.tar.gz -o tor.tar.gz
-          tar -xzf tor.tar.gz
-          mv tor/tor ./tor
-          [ -f tor/geoip ] && mv tor/geoip ./geoip || true
-          [ -f tor/geoip6 ] && mv tor/geoip6 ./geoip6 || true
-          chmod +x tor
-          rm -rf tor.tar.gz tor/
+          # ۴. آماده‌سازی هسته رسمی Tor و دیتابیس‌های GeoIP
+          echo "Extracting official Tor binary and GeoIP data..."
+          cp /usr/bin/tor ./tor
+          cp /usr/share/tor/geoip ./geoip 2>/dev/null || true
+          cp /usr/share/tor/geoip6 ./geoip6 2>/dev/null || true
+          chmod +x ./tor
 
       - name: Package Linux Archive with Auto-Installer
         run: |
@@ -195,7 +190,7 @@ jobs:
             - فایل اجرایی RedCloud مخصوص تمامی توزیع‌های لینوکس (Kali, BlackArch, Debian, Ubuntu, Arch, Fedora)
             - **هسته رسمی Sing-box نسخه 1.13.13**
             - **هسته رسمی Aether MASQUE (HTTP/3 QUIC)**
-            - **هسته رسمی Tor Expert Bundle به همراه دیتابیس‌های GeoIP**
+            - **هسته رسمی Tor به همراه دیتابیس‌های GeoIP**
             - **هسته رسمی Psiphon Tunnel Core**
             - اسکریپت خودکار `install.sh` جهت تنظیم دسترسی‌های دائمی TUN و ساخت دستور ترمینال `redcloud`
             
