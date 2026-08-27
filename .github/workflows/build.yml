@@ -35,12 +35,19 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # ۱. فعال‌سازی و ساخت خودکار فایل‌های پلتفرم لینوکس برای پروژه
+      - name: Configure and Enable Linux Platform Support
+        run: |
+          flutter config --enable-linux-desktop
+          flutter create --platforms=linux .
+
       - name: Generate Rust Bridge Code
         run: flutter_rust_bridge_codegen generate
 
       - name: Install Flutter Dependencies
         run: flutter pub get
 
+      # ۲. بیلد نسخه Release لینوکس
       - name: Build Linux Application (Release Mode)
         run: flutter build linux --release
 
