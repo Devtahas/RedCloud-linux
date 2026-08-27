@@ -817,9 +817,7 @@ pub fn start_hybrid_connection(
             "auto_route": true,
             "strict_route": false,
             "stack": "mixed",
-            "endpoint_independent_nat": true,
-            "sniff": true,
-            "sniff_override_destination": false
+            "endpoint_independent_nat": true
         }));
     }
 
@@ -974,7 +972,6 @@ pub fn start_hybrid_connection(
     let resolved_singbox = resolve_binary_path(&singbox_path);
     let mut command = Command::new(&resolved_singbox);
     command.arg("run").arg("-c").arg(&temp_config_path).current_dir(&work_dir);
-    command.env("ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM", "true");
 
     #[cfg(target_os = "linux")]
     configure_linux_child_lifecycle(&mut command);
@@ -1692,9 +1689,7 @@ pub fn start_proxy_with_node(
             "auto_route": true,
             "strict_route": false,
             "stack": "mixed",
-            "endpoint_independent_nat": true,
-            "sniff": true,
-            "sniff_override_destination": false
+            "endpoint_independent_nat": true
         }));
     }
 
@@ -1842,9 +1837,7 @@ pub fn start_proxy_with_node(
 
     let resolved_path = resolve_binary_path(&binary_path);
     let mut command = Command::new(&resolved_path);
-    command.arg("run").arg("-c").arg(&temp_config_path)
-           .current_dir(&work_dir);
-    command.env("ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM", "true");
+    command.arg("run").arg("-c").arg(&temp_config_path).current_dir(&work_dir);
 
     let log_file_path = work_dir.join("redcloud_sing_box_log.txt");
     let log_file = File::create(&log_file_path)
