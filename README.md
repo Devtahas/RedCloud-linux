@@ -7,6 +7,7 @@
 **Next-Generation Anti-Censorship Client Powered by Flutter & Rust**
 
 [![Release](https://img.shields.io/badge/Release-v3.5%20Linux-00D2FF.svg?style=for-the-badge\&logo=linux\&logoColor=white)](https://github.com/Devtahas/RedCloud-linux/releases/latest)
+[![License](https://img.shields.io/badge/License-Apache_2.0-F9D423.svg?style=for-the-badge\&logo=apache\&logoColor=black)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.29-02569B?style=for-the-badge\&logo=flutter\&logoColor=white)](https://flutter.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?style=for-the-badge\&logo=rust\&logoColor=black)](https://www.rust-lang.org)
 [![Sing-box](https://img.shields.io/badge/Sing--box-1.13.13-6C5DD3?style=for-the-badge\&logo=codeforces\&logoColor=white)](https://github.com/SagerNet/sing-box)
@@ -26,7 +27,7 @@
 
 ## 🌟 معماری شبکه و جریان ترافیک (Traffic Flow)
 
-در حالت اتصال هیبریدی، ترافیک سیستم از دو لایه عبور می‌کند:
+در حالت اتصال هیبریدی، که حالت پیشنهادی پروژه است، ترافیک سیستم از دو لایه عبور می‌کند:
 
 ```text
 [ کاربر / کل ترافیک سیستم‌عامل ]
@@ -58,7 +59,7 @@
 ### 🚀 ۱. اتصال هیبریدی Aether + Sing-box
 
 * زنجیره‌سازی خودکار بین **پل ضدسانسور اِتر (MASQUE)** و **هسته Sing-box**.
-* پشتیبانی از اتصال از طریق ورکرها و زیرساخت‌های ابری خارجی.
+* پشتیبانی از اتصال از طریق Workerها و زیرساخت‌های ابری خارجی.
 * تغییر مسیر و لایه‌بندی ترافیک برای افزایش پایداری اتصال در شبکه‌های محدودشده.
 
 ### ⚡ ۲. پشتیبانی از پروتکل نسل جدید MASQUE (Aether Engine)
@@ -98,7 +99,7 @@
 ### 🧅 ۶. شبکه‌های گمنامی Tor و Psiphon
 
 * **Tor over MASQUE:** عبور ترافیک Tor از طریق پل MASQUE برای افزایش مقاومت در برابر مسدودسازی.
-* امکان انتخاب کشور خروجی (Exit Node) در صورت پشتیبانی هسته Tor.
+* امکان انتخاب کشور خروجی (Exit Node) از میان سرورهای امن جهانی.
 * **Psiphon over MASQUE:** استفاده از هسته رسمی Psiphon در کنار لایه انتقال MASQUE.
 
 ### 🎯 ۷. اسکنر دوحالته لایه ۷ Cloudflare (IP Scanner)
@@ -107,40 +108,39 @@
 
 * تست موازی IPهای منتخب.
 * ارسال Handshake در لایه ۷ وب‌سوکت.
-* بررسی پاسخ `HTTP 101`.
+* بررسی پاسخ HTTP 101.
 
 #### Deep Scan
 
 * اسکن رنج‌های CIDR مربوط به Cloudflare.
 * استفاده از فایل `cloudflare_IPs.txt`.
-* بررسی تعداد زیادی IP برای یافتن نقاط اتصال مناسب.
+* بررسی تعداد زیادی IP برای یافتن تمیزترین نقاط اتصال.
 
 ### 🚦 ۸. تغییر‌دهنده هوشمند DNS (DNS Changer)
 
 * امکان تغییر DNS سیستم بدون نیاز به فعال‌سازی VPN.
-* هماهنگی خودکار با **NetworkManager (`nmcli`)**.
-* پشتیبانی از **systemd-resolved**.
-* پشتیبانی از DNSهای عمومی و سرویس‌های DNS رمزنگاری‌شده:
+* هماهنگی خودکار با **NetworkManager (nmcli)** و **systemd-resolved**.
+* پشتیبانی از DNSهای تحریم‌شکن داخلی و پروتکل‌های رمزنگاری DoH / DoT:
 
-  * DoH
-  * DoT
-  * شکن
-  * الکترو
+  * DoH (Cloudflare, Quad9, AdGuard)
+  * DoT (Google)
+  * شکن (Shecan)
+  * الکترو (Electro)
   * 403 Online
-  * رادار گیم
+  * رادار گیم (Radar Game)
 
 ---
 
 ## 🐧 توزیع‌های پشتیبانی‌شده (Compatibility)
 
-RedCloud به‌صورت مستقل و بدون نیاز به نصب فریم‌ورک‌های اضافی روی توزیع‌های مختلف لینوکس ۶۴ بیتی قابل اجرا است.
+RedCloud به‌صورت مستقل و بدون نیاز به نصب فریم‌ورک‌های اضافی، روی توزیع‌های مختلف لینوکس ۶۴ بیتی قابل اجرا است.
 
 | خانواده توزیع       | توزیع‌های آزمایش‌شده                                                     |
 | ------------------- | ------------------------------------------------------------------------ |
-| **Debian / Ubuntu** | Kali Linux، Debian 11 / 12، Ubuntu 20.04+، Linux Mint، Pop!_OS، Zorin OS |
-| **Arch Linux**      | Arch Linux، BlackArch، Manjaro، EndeavourOS، Garuda Linux                |
-| **RedHat / Fedora** | Fedora 38+، RHEL، AlmaLinux، Rocky Linux، CentOS Stream                  |
-| **سایر توزیع‌ها**   | openSUSE Tumbleweed / Leap، Void Linux، Alpine Linux                     |
+| **Debian / Ubuntu** | Kali Linux, Debian 11 / 12, Ubuntu 20.04+, Linux Mint, Pop!_OS, Zorin OS |
+| **Arch Linux**      | Arch Linux, BlackArch, Manjaro, EndeavourOS, Garuda Linux                |
+| **RedHat / Fedora** | Fedora 38+, RHEL, AlmaLinux, Rocky Linux, CentOS Stream                  |
+| **سایر توزیع‌ها**   | openSUSE Tumbleweed / Leap, Void Linux, Alpine Linux                     |
 
 ---
 
@@ -221,9 +221,9 @@ RedCloud-linux/
 ├── rust/
 │   ├── src/
 │   │   └── api/
-│   │       └── simple.rs
-│   │           # هسته بک‌اند لینوکس و مدیریت پروسه‌ها و کانفیگ Sing-box
-│   │
+│       └── simple.rs
+│           # هسته بک‌اند لینوکس و مدیریت پروسه‌ها و کانفیگ Sing-box
+│
 │   └── Cargo.toml
 │       # وابستگی‌های Rust مانند libc و serde
 │
@@ -232,6 +232,15 @@ RedCloud-linux/
 │
 └── README.md
 ```
+
+---
+
+## 📜 پروانه و شرایط استفاده (License)
+
+این نرم‌افزار تحت پروانه بین‌المللی [**Apache License 2.0**](LICENSE) منتشر شده است.
+
+* ✅ **استفاده و توسعه شخصی:** استفاده، بازنشر و مطالعه سورس‌کدها کاملاً آزاد و متن‌باز است.
+* ⚠️ **حقوق انحصاری برند و نام تجاری (Trademark Protection):** استفاده از نام **"RedCloud"**، **"RedCloud VPN"**، لوگوها و هویت پروژه در نسخه‌های فورک‌شده یا برنامه‌های اشتقاقی **ممنوع** است و توسعه‌دهندگان موظفند نسخه‌های تغییریافته خود را با **نام و برند کاملاً مجزا** منتشر کنند.
 
 ---
 
@@ -251,14 +260,12 @@ RedCloud-linux/
 
 ## 📢 ارتباط با ما و اخبار آپدیت‌ها
 
-* 💬 **کانال رسمی تلگرام:** [@DevTaha_project](https://t.me/DevTaha_project)
-* 🐙 **مخزن رسمی گیت‌هاب:** [Devtahas/RedCloud-linux](https://github.com/Devtahas/RedCloud-linux)
-* 🐛 **گزارش باگ و پیشنهادات:** [GitHub Issues](https://github.com/Devtahas/RedCloud-linux/issues)
+* 💬 **کانال رسمی تلگرام:** [**@DevTaha_project**](https://t.me/DevTaha_project)
+* 🐙 **مخزن رسمی گیت‌هاب:** [**Devtahas/RedCloud-linux**](https://github.com/Devtahas/RedCloud-linux)
+* 🐛 **گزارش باگ و پیشنهادات:** [**GitHub Issues**](https://github.com/Devtahas/RedCloud-linux/issues)
 
 ---
 
 <div align="center">
-
 <sub>توسعه‌یافته با ❤️ برای آزادی دسترسی به اینترنت آزاد و امن</sub>
-
 </div>
